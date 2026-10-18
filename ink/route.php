@@ -90,11 +90,11 @@ function ink_locale_route(string $canon, string $query, string $acceptLanguage =
         if ($seg !== '' && in_array($seg, $all, true)) {
             $rest = substr($canon, strlen($seg) + 1);
             $rest = $rest === '' ? '/' : $rest;
-            if (ink_locale_exempt($rest)) return [ink_exempt_locale(), $rest, [ink_location($rest, $query), 301]];
+            if (ink_locale_exempt($rest)) return [$def, $rest, [ink_location($rest, $query), 301]];
             if ($seg === $def && !$prefixed) return [$def, $rest, [ink_location($rest, $query), 301]];
             return [$seg, $rest, null];
         }
-        if (ink_locale_exempt($canon)) return [ink_exempt_locale(), $canon, null];
+        if (ink_locale_exempt($canon)) return [$def, $canon, null];
         if (!$prefixed) return [$def, $canon, null];
         $best = ink_accept_language($all, $acceptLanguage) ?? $def;
         return [$best, $canon, [ink_location('/' . $best . ($canon === '/' ? '' : $canon), $query), 302]];
@@ -108,7 +108,7 @@ function ink_locale_route(string $canon, string $query, string $acceptLanguage =
         else $other[] = $pair;
     }
     if (ink_locale_exempt($canon)) {
-        return [ink_exempt_locale(), $canon, $lang === null ? null : [ink_location($canon, $other ? '?' . implode('&', $other) : ''), 301]];
+        return [$def, $canon, $lang === null ? null : [ink_location($canon, $other ? '?' . implode('&', $other) : ''), 301]];
     }
     if ($lang === null) return [$def, $canon, null];
     if ($lang !== $def && in_array($lang, $all, true)) return [$lang, $canon, null];

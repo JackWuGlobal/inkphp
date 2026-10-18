@@ -86,7 +86,7 @@ function locale(mixed $set = null): string
 /**
  * Is this (unprefixed) path outside the language system? config('locale_exempt') lists path prefixes, e.g.
  * ['/admin', '/login', '/api']: '/admin' and '/admin/…' match, '/administrator' does not. Exempt URLs have one
- * address and one language: config('locale_exempt_locale', <first locale>).
+ * address and one language: the default (first) locale.
  */
 function ink_locale_exempt(string $path): bool
 {
@@ -97,12 +97,6 @@ function ink_locale_exempt(string $path): bool
     return false;
 }
 
-function ink_exempt_locale(): string
-{
-    $all = array_values((array) config('locales', ['zh', 'en']));
-    $l = config('locale_exempt_locale');
-    return is_string($l) && in_array($l, $all, true) ? $l : (string) ($all[0] ?? 'en');
-}
 
 /** config('locale_url'): 'prefix', 'query' or false. */
 function ink_locale_mode(): string|false

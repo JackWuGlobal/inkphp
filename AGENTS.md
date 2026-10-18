@@ -204,7 +204,7 @@ allow('GET', 'POST');         // 只接受这些方法；GET 自动包含 HEAD�
 - **query**：只看 `?lang=`；没有就是默认语言。`?lang=<默认语言>`、未知值 → 301 到去掉它的网址。
 - 两种方式下语言**只由网址决定**：不写 cookie，不看 `Accept-Language`，所以每个语言版本都可以 `cache_public()`。
 - **不参与多语言的网址**（后台、登录、API）：在 `config.php` 里明确列出路径前缀，`'locale_exempt' => ['/admin', '/login', '/logout', '/api']`。
-  这些网址只有一个地址、一种语言（`locale_exempt_locale`，默认第一个语言）：不加前缀、不按浏览器语言跳转，`/en/admin` → 301 `/admin`，
+  这些网址只有一个地址、一种语言（默认语言，即 `locales` 的第一个）：不加前缀、不按浏览器语言跳转，`/en/admin` → 301 `/admin`，
   `?lang=` 被去掉；`href('/admin')` 永远是 `/admin`；`locale_urls()` 对它们每种语言都给同一个网址。`'/admin'` 匹配 `/admin` 和 `/admin/…`，
   不匹配 `/administrator`。`bin/ink routes` 在这些页面后标 `no-lang`。
 
@@ -811,7 +811,6 @@ exit;
 | `locale_url` | `'prefix'`（示例） | 语言放在网址里的方式：`'prefix'`、`'query'` 或 `false`（§4.4） |
 | `locale_default_prefixed` | `false` | prefix 模式下默认语言是否也带前缀 |
 | `locale_exempt` | `[]`（示例：`['/admin', '/login', '/logout', '/api']`） | 不参与多语言的路径前缀（§4.4） |
-| `locale_exempt_locale` | 第一个语言 | 这些网址使用的语言 |
 | `session_lifetime` | `86400` | session 闲置多少秒后失效（每次开启 session 时检查） |
 | `db.dsn` / `db.user` / `db.pass` | SQLite | 见 §6.5 |
 

@@ -12,7 +12,6 @@ return [
     'locale_default_prefixed' => false, // prefix mode: true → /zh/about too, and a bare /about redirects by Accept-Language
     // URLs outside the language system (one address, one language): back office, login, APIs. Path prefixes.
     'locale_exempt' => ['/admin', '/login', '/logout', '/api'],
-    // 'locale_exempt_locale' => 'zh',  // their language; default = the first of locales
     'session_lifetime' => 86400, // seconds a session may stay idle
     'db' => [
         'dsn' => 'sqlite:' . INK_ROOT . '/storage/db.sqlite',
