@@ -30,7 +30,7 @@ layout('site', ['title' => 'Hello']);
 1. **一个网址 = 一个文件 = 一个功能。** 读一个页面文件就能知道这个网址的全部行为。不要把一个功能拆到多个文件里，也不要让一个文件服务彼此无关的功能。
 2. **没有隐式执行。** 页面的每个依赖都是页面里一次显式的调用。不准添加守卫文件、中间件、`auto_prepend_file`、"每个请求都会 include 的文件"或运行时扫描源码。
 3. **默认安全。** 最短的写法就是安全的写法：`e()` 转义，参数化 SQL，`csrf_field()`/`csrf_check()`，只跳本站的 `redirect()`，页面源码不在网站根目录，上传文件永远不会被执行。
-4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、44 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
+4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、45 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
 5. **零依赖，零构建。** PHP ≥ 8.2（目标 8.4）。部署 = 复制文件 / `git pull`。
 
 **不做**：MVC、ORM/查询构造器（没有 Medoo）、插件、主题、中间件、依赖注入容器、事件、模板引擎。不要把它们加回来。
@@ -69,8 +69,9 @@ inkphp/
 两个页面显示类似的东西（例如都列出留言），就**各写一份**。少量重复换来的是：改一个页面永远不会弄坏另一个页面。
 同一个页面里要输出两次的片段（例如整页和 htmx 刷新），写成**页面内片段**（§6.4）。
 唯一共享的模板是 `layouts/`（页面外框），它只通过 `layout()` 拿到明确传入的变量。
-确实要共享的 PHP 函数（很少需要，例如金额格式化），放在 `pages/` 以外的目录（例如 `lib/money.php`），
+多个页面都要用的**业务函数**（例如域名解析、分类规则、金额格式化），放在 `pages/` 以外的 `lib/` 目录（例如 `lib/money.php`），
 由用到它的页面在骨架声明之后显式写 `require_once INK_ROOT . '/lib/money.php';`。不要做任何自动加载。
+`lib/` 里的文件**只定义函数**（和常量）：被 require 时不输出、不查库、不改全局状态；函数名带前缀（`dph_parse_domain()`）避免冲突；不要把页面逻辑、HTML 或 `params()`/`allow()` 放进去。页面里的 `require_once` 一眼就能看出它用了哪些共享函数。
 
 ---
 
@@ -414,10 +415,12 @@ layout('site', ['title' => '留言']);
 ```
 长段落的双语内容用 `<?php if (locale() === 'zh'): ?> … <?php else: ?> … <?php endif ?>`。
 
-**`locale(mixed $set = null): string`**
+**`locale(mixed $set = null, bool $remember = true): string`**
 当前语言，取值来自 `config('locales')`（默认 `['zh', 'en']`）。优先级：`locale('en')` > 查询串 `?lang=en` > cookie `lang` > `Accept-Language`（按 q 值；先精确匹配，再匹配主标签：`zh-CN` → `zh`）> 第一个配置的语言。
 `locale($x)` 和 `?lang=` 会写 `lang` cookie（1 年、Lax、HttpOnly，值变了才发）。**不是配置里的语言字符串的值（未知的值、数组、`null`）会被忽略**，所以 `locale($_GET['l'] ?? null)` 这种写法是安全的（`?l[]=en` 也不会出错）。
 结果来自 cookie、`Accept-Language` 或默认语言时，这个响应因访客而异，`cache_public()` 会在收尾时被降级。
+`locale('zh', false)`：**只为本次请求**固定语言，不写 cookie，访客在其他页面的语言选择不受影响。典型用法：只有一种语言的后台页面在开头写
+`locale('zh', false);`，这样 `t()`、`validate()` 的错误提示、错误页都用中文。
 ```php
 <html lang="<?= e(locale()) ?>">
 <a href="?lang=en">English</a>
@@ -498,6 +501,13 @@ redirect('/settings', 303);
 **`csrf_field(): string`** — `<input type="hidden" name="_csrf" value="…">`，放进每个 POST 表单。
 ```php
 <form method="post"><?= csrf_field() ?> … </form>
+```
+
+**`csrf_exempt(string $reason): void`**
+声明：这个页面**有意**不用 CSRF 令牌（运行时什么都不做，`bin/ink check` 看到它就不再警告）。只用在两种情况：
+`navigator.sendBeacon` 这类无法带请求头的回传，或者凭页面自己的一次性令牌 / API token 鉴权的接口。原因写清楚是怎么防护的。后台（`pages/admin…`）不能用它豁免。
+```php
+csrf_exempt('sendBeacon 回传：只写访问记录，凭本次访问的一次性令牌校验');
 ```
 
 **`csrf_check(): void`**
@@ -824,6 +834,7 @@ exit;
 | warn | 开头的声明里直接写了 `csrf_check()`，但页面同时允许 GET（每个 GET 都会 403） |
 | error | `pages/admin.php` 和 `pages/admin/…` 的开头声明里没有 `require_login()` |
 | error | 参数可选（`params(0, 1)` 这类 min < max）、又允许了 GET 以外的方法，但整页只调用了一次 `allow()`：要写明带参数的网址接受哪些方法，例如 `if ($id !== null) allow('GET');`（§4.3） |
+| warn | 允许了 POST 等写方法却没调用 `csrf_check()`（后台是 error）；页面里写了 `csrf_exempt('原因')` 时不警告（后台不豁免） |
 | warn | `params()` / `allow()` 的参数不是字面量 |
 | error | `layout('x')` 指向的文件不存在 |
 | error | 调用了 `partial()`，或者存在 `partials/` 目录（1.0 已移除共享片段：把 HTML 写进页面，见 §6.4） |

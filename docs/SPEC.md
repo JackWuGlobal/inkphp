@@ -259,6 +259,9 @@ are percent-encoded.
   · `csrf_check(): void` — reads POST `_csrf` or header `X-CSRF-Token` (strings only), hash_equals, else abort(403).
   The token is never read from the query string, and the check runs whatever the method — on a GET+POST page call it
   inside `if (is_post())`.
+- `csrf_exempt(string $reason): void` — declaration only (no runtime effect; empty reason → LogicException);
+  silences the `bin/ink check` CSRF warning outside the admin area. For sendBeacon or self-authorised endpoints.
+- `locale($set, false)` sets the locale for this request only, without the lang cookie (single-language admin pages).
 - `login(int|string $id): void` (regenerates the session id and the CSRF token) · `logout(): void` (clears the session
   data and regenerates the id, so a flash() after it still works) · `user(): int|string|null` (no session is started
   when the cookie is absent) · `require_login(string $loginPath = '/login'): int|string` — not logged in:

@@ -383,8 +383,9 @@ function ink_cli_check_page(string $file, array $p): array
     $methods = isset($lead['allow']) ? ink_cli_methods($lead['allow']) : ['GET', 'HEAD'];
     if ($methods === null) {
         $issues[] = ['warn', $file, 'allow() arguments are not literal strings'];
-    } elseif (array_diff($methods, ['GET', 'HEAD', 'OPTIONS']) && !isset($p['uses']['csrf_check'])) {
-        $issues[] = [$admin ? 'error' : 'warn', $file, 'allows ' . implode('/', array_diff($methods, ['GET', 'HEAD', 'OPTIONS'])) . ' but never calls csrf_check()'];
+    } elseif (array_diff($methods, ['GET', 'HEAD', 'OPTIONS']) && !isset($p['uses']['csrf_check'])
+        && ($admin || !isset($p['uses']['csrf_exempt']))) { // csrf_exempt('why') silences it, except in the admin area
+        $issues[] = [$admin ? 'error' : 'warn', $file, 'allows ' . implode('/', array_diff($methods, ['GET', 'HEAD', 'OPTIONS'])) . ' but never calls csrf_check()' . ($admin ? '' : " (or declare csrf_exempt('why'))")];
     }
     $writes = array_diff($methods ?? [], ['GET', 'HEAD', 'OPTIONS']);
     if ($writes && isset($range) && $range[0] < $range[1] && $p['allows'] < 2) {

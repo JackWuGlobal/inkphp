@@ -51,16 +51,16 @@ function t(array|string $s, array $vars = []): string
 
 /**
  * Current locale, one of config('locales'). Order: locale($set) > ?lang= > cookie 'lang' > Accept-Language > first.
- * locale($set) and ?lang= also store the 'lang' cookie (1 year). A $set that is not a configured locale string
+ * locale($set) and ?lang= also store the 'lang' cookie (1 year); locale($set, false) is for this request only. A $set that is not a configured locale string
  * (unknown value, array, …) is ignored. A language from the cookie, Accept-Language or the default varies by
  * visitor, so cache_public() is downgraded at finish.
  */
-function locale(mixed $set = null): string
+function locale(mixed $set = null, bool $remember = true): string
 {
     static $current = null;
     $all = array_values((array) config('locales', ['zh', 'en']));
     if (is_string($set) && in_array($set, $all, true)) {
-        ink_lang_cookie($set);
+        if ($remember) ink_lang_cookie($set); // locale('zh', false): this request only, the visitor's choice stays
         return $current = $set;
     }
     if ($current !== null) return $current;

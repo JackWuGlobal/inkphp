@@ -67,6 +67,16 @@ function csrf_token(): string
 
 function csrf_field(): string { return '<input type="hidden" name="_csrf" value="' . e(csrf_token()) . '">'; }
 
+/**
+ * csrf_exempt('why'): a declaration for readers and `bin/ink check`, does nothing at runtime. Use it only on a page
+ * that accepts POST without a session-bound form — e.g. navigator.sendBeacon (cannot send headers) or an endpoint
+ * authorised by its own one-time token — and say how it is protected instead.
+ */
+function csrf_exempt(string $reason): void
+{
+    if (trim($reason) === '') throw new LogicException('csrf_exempt(): give the reason');
+}
+
 /** Token from POST field _csrf or header X-CSRF-Token (never the query string), else 403. */
 function csrf_check(): void
 {
