@@ -1,0 +1,11 @@
+Vendored third-party files in public/assets/ (no npm, no build: the files are committed as is).
+To upgrade: download the new pinned version, check the hash against the npm tarball, update this file.
+
+htmx.min.js
+  package : htmx.org 2.0.11 (npm, released 2026-09-22)
+  source  : https://cdn.jsdelivr.net/npm/htmx.org@2.0.11/dist/htmx.min.js
+            (identical to package/dist/htmx.min.js in https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.11.tgz,
+             tarball integrity sha512-Thx/WtpeOQqSrqBCw/A1cwGJGg4UrVa3+sW0GmrM3p4gJgO89ecH4qtbnyzDDWFvBTqjnIMCgELTNt636dtamA==)
+  sha256  : d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717
+  license : 0BSD (Zero-Clause BSD), https://github.com/bigskysoftware/htmx
+  check   : shasum -a 256 public/assets/htmx.min.js   (or: sha256sum public/assets/htmx.min.js)

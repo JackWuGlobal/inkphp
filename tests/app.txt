@@ -1,0 +1,59 @@
+# Route table of the example app in pages/ (docs/SPEC.md §11). Keep it next to the pages: add a line when you add a URL.
+#   bin/ink test                                    in-process, with tests/routes.txt (no server, no database)
+#   bin/ink test tests/app.txt --http=BASE_URL      the full behaviour against a running server, e.g. after a deploy
+#                                                   (run bin/ink migrate first: /guestbook, /search/… and /api/notes read the database)
+# In-process, a line whose page runs and whose status only the page's own code can produce (403 from a csrf_check()
+# inside if (is_post()), 401, 422 …) is reported as skipped: --http checks it. A status the page decides that looks like
+# a routing status (a 404 for a missing record or a bad id) is written "-> http:404": skipped in-process, checked with --http.
+# Line format: METHOD /raw/path -> STATUS [page file (200) | Location (3xx)] [params as JSON]   # comment
+
+# --- home: params() with no arguments, so every other single segment is a 404 -------------------------
+GET     /                        -> 200 pages/index.php []
+HEAD    /                        -> 200 pages/index.php []
+GET     /?lang=en                -> 200 pages/index.php []
+GET     /index.php               -> 301 /
+GET     /anything                -> 404
+GET     /.env                    -> 404
+POST    /                        -> 405
+
+# --- about: a plain GET page ------------------------------------------------------------------------
+GET     /about                   -> 200 pages/about.php []
+GET     /about.php               -> 301 /about
+GET     /about/                  -> 301 /about
+GET     /about/x                 -> 404
+POST    /about                   -> 405
+
+# --- guestbook: GET + POST form with CSRF -----------------------------------------------------------
+GET     /guestbook               -> 200 pages/guestbook.php []
+POST    /guestbook               -> 403                       # no CSRF token
+PUT     /guestbook               -> 405
+GET     /guestbook/1             -> 404
+
+# --- search: params(0, 1) -------------------------------------------------------------------------
+GET     /search                  -> 200 pages/search.php []
+GET     /search?q=ink            -> 200 pages/search.php []
+GET     /search/ink              -> 200 pages/search.php ["ink"]
+GET     /search/%E4%BD%A0%E5%A5%BD -> 200 pages/search.php ["你好"]
+GET     /search/a/b              -> 404
+POST    /search                  -> 405
+
+# --- login, logout, admin -----------------------------------------------------------------------------
+GET     /login                   -> 200 pages/login.php []
+POST    /login                   -> 403                       # no CSRF token
+GET     /logout                  -> 405                       # logout is POST only
+POST    /logout                  -> 403
+GET     /admin                   -> 302 /login?next=%2Fadmin
+POST    /admin                   -> 302 /login?next=%2Fadmin  # login is checked before CSRF
+GET     /admin/x                 -> 404
+
+# --- JSON API ------------------------------------------------------------------------------------------
+GET     /api/notes               -> 200 pages/api/notes.php []
+GET     /api/notes?limit=0       -> 422                       # validate(): limit must be 1..100
+POST    /api/notes               -> 401                       # not logged in: JSON, not a redirect
+DELETE  /api/notes               -> 405
+GET     /api/notes/1             -> 404
+GET     /api/nope                -> 404
+
+# --- robots.txt is a page (pages/robots.txt.php) ----------------------------------------------------
+GET     /robots.txt              -> 200 pages/robots.txt.php []
+GET     /robots.txt.php          -> 301 /robots.txt

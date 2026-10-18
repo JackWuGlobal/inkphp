@@ -1,0 +1,21 @@
+# Apache / shared hosting: serve real files, send everything else to index.php (the router).
+# PHP sources and hidden paths are never served as files (.well-known is allowed).
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteCond %{REQUEST_URI} !\.(php\d?|phtml|phar)$ [NC]
+    RewriteCond %{REQUEST_URI} !/\.(?!well-known/)
+    RewriteRule ^ - [END]
+    RewriteRule ^ index.php [END]
+</IfModule>
+
+# Visitors' uploads are served from this origin: the browser must never sniff them or run them as a page.
+<IfModule mod_headers.c>
+    <If "%{REQUEST_URI} =~ m#^/uploads/#">
+        Header always set X-Content-Type-Options "nosniff"
+        Header always set Content-Security-Policy "sandbox; default-src 'none'"
+    </If>
+</IfModule>

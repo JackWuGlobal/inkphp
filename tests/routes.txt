@@ -1,0 +1,195 @@
+# Kernel routing table (docs/SPEC.md §4), checked against the fixture pages in tests/fixtures/pages/.
+#   bin/ink test                      in-process: canonical redirect + resolver + each page's leading declarations
+#   bin/ink test tests/routes.txt --http=http://127.0.0.1:8000
+#                                     the same lines against a server whose pages/ is a copy of the fixtures
+# Line format: METHOD /raw/path -> STATUS [page file (200) | Location (3xx)] [params as JSON]   # comment
+# "pages/…" means a file in the pages directory in use. Paths are used as written; over HTTP only bytes outside
+# printable ASCII are percent-encoded first (as browsers do: php -S drops raw UTF-8 request lines).
+@pages tests/fixtures/pages
+
+# --- the root page, and the "index" segment -------------------------------------------------------
+GET     /                                  -> 200 pages/index.php []
+HEAD    /                                  -> 200 pages/index.php []
+GET     /?lang=en                          -> 200 pages/index.php []
+GET     /hello                             -> 200 pages/index.php ["hello"]   # the fallback page takes the segments
+GET     /0                                 -> 200 pages/index.php ["0"]       # '0' is a real param (0.x dropped it)
+GET     /hello/world                       -> 404                             # index.php accepts at most 1 param
+GET     /index                             -> 301 /
+GET     /index.php                         -> 301 /
+GET     /index/                            -> 301 /
+GET     /index.php?a=1&b=2                 -> 301 /?a=1&b=2
+GET     /index/5                           -> 301 /5
+GET     /index/index                       -> 301 /                           # applied until stable: one hop
+GET     /index/index.php                   -> 301 /
+POST    /index                             -> 308 /                           # 308 keeps the method and body
+GET     /foo/index                         -> 404                             # 'index' is only dropped first
+
+# --- .php is stripped from the LAST segment only, in one hop ----------------------------------------
+GET     /about                             -> 200 pages/about.php []
+HEAD    /about                             -> 200 pages/about.php []
+GET     /about.php                         -> 301 /about
+GET     /about.php?x=1&y=%2F               -> 301 /about?x=1&y=%2F            # the raw query is kept as-is
+GET     /about.php?q=中文                  -> 301 /about?q=%E4%B8%AD%E6%96%87  # non-ASCII is encoded in Location
+GET     /about.php.php                     -> 301 /about
+GET     /about.php/                        -> 301 /about
+HEAD    /about.php                         -> 301 /about
+POST    /about.php                         -> 308 /about
+PUT     /about/                            -> 308 /about
+GET     /zh/popular.php                    -> 301 /zh/popular
+GET     /zh/popular.php/2                  -> 404                             # zh.php gets ["popular.php","2"]
+GET     /about.php/5                       -> 404                             # index.php gets 2 params
+GET     /about%2Ephp                       -> 301 /about                      # %2E is '.', decoded first (§4.1)
+GET     /about.PHP                         -> 200 pages/index.php ["about.PHP"]  # only lower-case .php is stripped
+GET     /about/x                           -> 404                             # params() accepts none
+
+# --- slashes, dots, and Location safety ------------------------------------------------------------
+GET     //about                            -> 301 /about
+GET     ///about//                         -> 301 /about
+GET     /about/                            -> 301 /about
+GET     /./about                           -> 301 /about
+GET     /about/.                           -> 301 /about
+GET     //evil.com                         -> 301 /evil.com                   # never protocol-relative
+GET     //evil.com/                        -> 301 /evil.com
+GET     /index//evil.example               -> 301 /evil.example
+GET     /\evil.com                         -> 404                             # '\' never reaches a page
+GET     /\evil.com/                        -> 301 /%5Cevil.com                # '\' is encoded in Location
+GET     //\evil.com                        -> 301 /%5Cevil.com
+GET     /%5Cevil.com                       -> 404
+GET     /a/../about                        -> 400
+GET     /..                                -> 400
+GET     /about/..                          -> 400
+GET     /.well-known/../x                  -> 400
+
+# --- percent-encoding: unreserved characters are decoded, other escapes upper-cased (one redirect) -----
+GET     /%61bout                           -> 301 /about                      # no second URL for a page
+GET     /abou%74                           -> 301 /about
+GET     /%61dmin                           -> 301 /admin
+GET     /%69ndex/5                         -> 301 /5                          # then the other rules, same hop
+GET     /about%2ephp                       -> 301 /about
+GET     /search/%7e                        -> 301 /search/~
+GET     /search/~                          -> 200 pages/search.php ["~"]
+GET     /search/%41b%5fC%2D1               -> 301 /search/Ab_C-1
+GET     /search/%e4%b8%ad                  -> 301 /search/%E4%B8%AD
+POST    /%61bout                           -> 308 /about
+GET     /a/%2e%2e/about                    -> 400
+GET     /search/%25                        -> 200 pages/search.php ["%"]      # '%' itself stays encoded
+
+# --- percent-decoding: once per segment, UTF-8 only, no separators or controls -----------------------
+GET     /search/%E4%B8%AD%E6%96%87         -> 200 pages/search.php ["中文"]
+GET     /search/中文                       -> 200 pages/search.php ["中文"]
+GET     /search/中文/                      -> 301 /search/%E4%B8%AD%E6%96%87
+GET     /search/a%20b                      -> 200 pages/search.php ["a b"]
+GET     /search/a+b                        -> 200 pages/search.php ["a+b"]    # '+' is not a space in a path
+GET     /search/%2520                      -> 200 pages/search.php ["%20"]    # decoded exactly once
+GET     /search/100%25                     -> 200 pages/search.php ["100%"]
+GET     /search/0                          -> 200 pages/search.php ["0"]
+GET     /search/example.com                -> 200 pages/search.php ["example.com"]  # dots in params are fine
+GET     /search/goat.zip                   -> 200 pages/search.php ["goat.zip"]
+GET     /search/Ab_C-1                     -> 200 pages/search.php ["Ab_C-1"]       # params keep their case
+GET     /search/x.php                      -> 301 /search/x
+GET     /search/a%2Fb                      -> 404                             # an encoded '/' never splits
+GET     /search/a%2fb                      -> 301 /search/a%2Fb               # other escapes are upper-cased
+GET     /search/a%5Cb                      -> 404
+GET     /search/a%00b                      -> 404
+GET     /search/a%0Ab                      -> 404
+GET     /search/%7F                        -> 404
+GET     /search/%FF                        -> 404                             # not UTF-8
+GET     /search/%C3%28                     -> 404
+GET     /search/%2e%2e                     -> 400                             # %2E is '.': this is '..'
+GET     /search/%2E                        -> 301 /search                     # and this is '.'
+GET     /search/%2E%2E%2E                  -> 301 /search/...
+GET     /search/...                        -> 200 pages/search.php ["..."]     # only '.' and '..' are special
+GET     /zh%2Fpopular                      -> 404
+GET     /search                            -> 404                             # params(1) needs one
+GET     /search/a/b                        -> 404
+GET     /search?q=a                        -> 404                             # the query is not a path param
+
+# --- params() counts ---------------------------------------------------------------------------------
+GET     /product                           -> 404
+GET     /product/0                         -> 200 pages/product.php ["0"]
+GET     /product/42                        -> 200 pages/product.php ["42"]
+GET     /product/0/0                       -> 404
+GET     /legacy                            -> 200 pages/legacy.php []
+GET     /legacy/x                          -> 404                             # no params(): no path params
+GET     /dynamic/a/b/c                     -> 200 pages/dynamic.php ["a","b","c"]
+
+# --- x.php and x/ side by side; the deepest file wins ------------------------------------------------
+GET     /zh                                -> 200 pages/zh.php []
+GET     /zh/popular                        -> 200 pages/zh/popular.php []
+GET     /zh/popular/0                      -> 200 pages/zh/popular.php ["0"]
+GET     /zh/other                          -> 200 pages/zh.php ["other"]
+GET     /zh/index                          -> 200 pages/zh.php ["index"]      # pages/zh/index.php never runs
+GET     /zh/Popular                        -> 200 pages/zh.php ["Popular"]    # names are case-sensitive
+GET     /ZH/popular/2                      -> 404                             # index.php gets 3 params
+GET     /shop/cart                         -> 200 pages/shop/cart.php []
+GET     /shop/cart/x                       -> 404                             # deepest file wins, then rejects
+GET     /shop/x/y                          -> 200 pages/shop.php ["x","y"]
+GET     /shop/cart.php                     -> 301 /shop/cart
+GET     /blog/hello                        -> 200 pages/blog.php ["hello"]
+
+# --- private and invalid names are never routed, at any depth ----------------------------------------
+GET     /_private                          -> 200 pages/index.php ["_private"]  # the fallback, not _private.php
+GET     /_partials/nav                     -> 404
+GET     /blog/_draft                       -> 200 pages/blog.php ["_draft"]
+GET     /.secret                           -> 200 pages/index.php [".secret"]
+GET     /.env                              -> 200 pages/index.php [".env"]
+GET     /.git/config                       -> 404
+GET     /Upper                             -> 200 pages/index.php ["Upper"]   # Upper.php is never routed
+GET     /ABOUT                             -> 200 pages/index.php ["ABOUT"]
+GET     /About.php                         -> 301 /About
+GET     /pages/about                       -> 404
+GET     /ink/boot                          -> 404
+
+# --- dynamic twins of static-looking files, and .well-known -------------------------------------------
+GET     /robots.txt                        -> 200 pages/robots.txt.php []
+GET     /robots.txt.php                    -> 301 /robots.txt
+GET     /robots.txt/                       -> 301 /robots.txt
+GET     /robots                            -> 200 pages/index.php ["robots"]
+GET     /sitemap.xml                       -> 200 pages/sitemap.xml.php []
+GET     /my-page_v2                        -> 200 pages/my-page_v2.php []
+GET     /.well-known/security.txt          -> 200 pages/.well-known/security.txt.php []
+GET     /.well-known/security.txt.php      -> 301 /.well-known/security.txt
+GET     /.well-known/acme-challenge/tok-EN_1 -> 200 pages/.well-known/acme-challenge.php ["tok-EN_1"]
+GET     /.well-known/acme-challenge        -> 404
+
+# --- nesting: at most 12 segments ---------------------------------------------------------------------
+GET     /deep/a/b/c/d/e                    -> 200 pages/deep/a/b/c/d/e.php []
+GET     /deep/a/b/c/d/e/1/2/3/4/5/6        -> 200 pages/deep/a/b/c/d/e.php ["1","2","3","4","5","6"]
+GET     /deep/a/b/c/d/e/1/2/3/4/5/6/7      -> 404                             # 13 segments
+GET     /deep/a/b                          -> 404                             # a directory is not a page
+GET     /deep/a/b/c/d/x                    -> 404
+GET     /a/b/c/d/e/f/g/h/i/j/k/l/m         -> 404
+
+# --- methods: allow(), and GET/HEAD only without it --------------------------------------------------
+POST    /about                             -> 405
+DELETE  /about                             -> 405
+OPTIONS /about                             -> 405
+POST    /legacy                            -> 405
+POST    /legacy/x                          -> 404                             # params are checked first
+GET     /form                              -> 200 pages/form.php []
+HEAD    /form                              -> 200 pages/form.php []           # GET implies HEAD
+POST    /form                              -> 200 pages/form.php []
+PUT     /form                              -> 405
+OPTIONS /form                              -> 405                             # OPTIONS is not special
+GET     /submit                            -> 405
+HEAD    /submit                            -> 405
+POST    /submit                            -> 403                             # csrf_check() without a token
+
+# --- require_login() for an anonymous visitor -------------------------------------------------------
+GET     /account                           -> 302 /login?next=%2Faccount
+GET     /account?tab=2&x=%2F               -> 302 /login?next=%2Faccount%3Ftab%3D2%26x%3D%252F
+GET     /account/x                         -> 404                             # params() runs first
+POST    /account                           -> 405                             # the redirect is replaced: no allow()
+GET     /admin                             -> 302 /login?next=%2Fadmin
+GET     /admin/users                       -> 302 /login?next=%2Fadmin%2Fusers
+GET     /admin/users/5                     -> 302 /login?next=%2Fadmin%2Fusers%2F5
+POST    /admin/users                       -> 302 /login?next=%2Fadmin%2Fusers  # login before csrf_check()
+DELETE  /admin/users                       -> 405
+GET     /admin/users/5/6                   -> 404
+GET     /members                           -> 302 /signin?from=members&next=%2Fmembers  # layout() first is fine
+POST    /members                           -> 302 /signin?from=members&next=%2Fmembers
+PUT     /members                           -> 405
+GET     /members/x                         -> 404
+GET     /api/me                            -> 401                             # under /api: JSON, not a redirect
+POST    /api/me                            -> 405
+GET     /api/me.php                        -> 301 /api/me

@@ -1,0 +1,4 @@
+#!/usr/bin/env php
+<?php
+// inkphp command line: bin/ink help. The implementation is ink/cli.php (docs/SPEC.md §11).
+require __DIR__ . '/../ink/cli.php';

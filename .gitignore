@@ -1,18 +1,16 @@
-# macOS
+# macOS / editors
 .DS_Store
-
-# IDE
 .vscode/
 .idea/
-
-# Logs
-_logs/
-*.log
-
-# Config (contains sensitive data)
-_config.php
-
-# Temporary files
-*.tmp
 *.swp
 *~
+
+# Secrets
+.env.php
+
+# Runtime data (directories are kept via .gitkeep)
+/storage/**
+!/storage/*/
+!/storage/*/.gitkeep
+/public/uploads/*
+!/public/uploads/.gitkeep

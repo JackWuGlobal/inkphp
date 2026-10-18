@@ -1,231 +1,99 @@
 # inkphp
 
-> 极简PHP框架 | think less. ink more.
+> 一个网址 = 一个文件 = 一个功能。为 AI 编程助手（和人）设计的极小 PHP 框架。
 
-**inkphp** 是一个极简PHP框架，为那些觉得ThinkPHP过于复杂的开发者而生。
+inkphp 1.0 是一次重写，与 0.x 不兼容。迁移方法见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 特性
+## inkphp 是什么
 
-- 🚀 **极快** - 路由下沉到内核层，比Laravel快200-500倍
-- 📦 **零依赖** - 无需Composer，上传即用
-- 📁 **文件路由** - URL直接映射文件，一目了然
-- 🎨 **htmx集成** - 无需写JavaScript实现动态交互
-- 🔒 **安全** - 内置XSS/SQL注入防护
-- 📖 **1天上手** - 会PHP就会用
+- **文件即网址**：`/about` 就是 `pages/about.php`，`/blog/hello` 是 `pages/blog.php` 收到参数 `hello`。没有路由表要维护。
+- **一个文件就是一个完整功能**：参数、允许的请求方法、登录、CSRF、校验、SQL、HTML、表单提交和 htmx 局部刷新，都写在同一个页面文件里。
+- **不调用就不运行**：没有中间件、守卫文件、自动加载、事件钩子。页面需要什么，就在页面里调用什么。
+- **默认安全**：`e()` 转义输出，SQL 只用参数，表单自带 CSRF，`redirect()` 只跳本站，页面源码不在网站根目录，上传文件永远不会被执行。
+- **零依赖、零构建**：不需要 Composer，不需要 npm。PHP ≥ 8.2（推荐 8.4），数据库默认 SQLite，也支持 PostgreSQL / MySQL（只用 PDO，没有 ORM）。内置 htmx 2，界面文字用 `t()` 就地写中英文。
+- **小**：Web 内核（`ink/` 下除 `cli.php` 外）约 1000 行、44 个公开函数，命令行 `ink/cli.php` 约 570 行，一次就能整个读完。
 
-## 快速开始
+## 为什么是"一个网址 = 一个文件"
 
-### 1. 安装
+让 AI（或者新同事）改一个功能时，最怕两件事：要读的文件太多，以及有看不见的东西在悄悄运行。
 
-```bash
-git clone https://github.com/yourname/inkphp
-cd inkphp
-```
+- 打开 `pages/signup.php`，就能看到 `/signup` 的**全部**行为。不需要再去找控制器、路由表、中间件、模型、模板、配置。
+- 文件里写着什么就执行什么。没有"约定好会自动执行的文件"，所以读到的就是运行的。
+- 改一个功能只改一个文件，删一个功能就删一个文件，代码审查一眼就能看完。
+- 规则少而固定（第一行 `params()`，第二行 `allow()` …），`php bin/ink check` 能自动检查，AI 不容易写偏。
 
-### 2. 配置
+## 5 分钟上手
 
-```bash
-cp _config.example.php _config.php
-vim _config.php  # 修改数据库配置
-```
-
-### 3. 运行
+需要：PHP ≥ 8.2，带 `pdo_sqlite`（大多数发行版默认就有）。
 
 ```bash
-# 开发环境
-php -S localhost:8000
-
-# 生产环境（Nginx配置见NGINX.md）
+git clone <仓库地址> myapp && cd myapp
+php bin/ink migrate        # 建示例用的数据表（SQLite：storage/db.sqlite）
+php bin/ink serve          # 开发服务器：http://127.0.0.1:8000
 ```
 
-## 示例
+打开 http://127.0.0.1:8000 ，首页列出了仓库自带的示例：留言板、实时搜索、登录、后台、JSON API。
 
-### Hello World
+**写第一个页面。** 新建 `pages/hello.php`：
 
 ```php
 <?php
-// hello.php
-require_once '_core/init.php';
+[$name] = params(0, 1);                    // /hello 或 /hello/<名字>
+layout('site', ['title' => 'Hello']);
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 flex items-center justify-center min-h-screen">
-    <h1 class="text-4xl font-bold text-gray-800">
-        Hello, inkphp!
-    </h1>
-</body>
-</html>
+<h1><?= e(t(['zh' => '你好，{n}！', 'en' => 'Hello, {n}!'], ['n' => $name ?? 'inkphp'])) ?></h1>
 ```
 
-访问：`http://localhost:8000/hello`
+访问 `/hello` 和 `/hello/世界`。不用注册路由，也不用重启。
 
-### 数据库查询
+**加一个表单。** 处理 POST 的页面再多两行：`allow('GET', 'POST')` 和 `csrf_check()`。完整写法见 [AGENTS.md](AGENTS.md) 第 5 节和第 17 节。
 
-```php
-<?php
-// products.php
-require_once '_core/init.php';
+**常用命令：**
 
-$products = $db->select('products', '*', [
-    'status' => 'active',
-    'ORDER' => ['created_at' => 'DESC'],
-    'LIMIT' => 20
-]);
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold mb-4">产品列表</h1>
-    <div class="grid gap-4">
-        <?php foreach($products as $product): ?>
-            <div class="bg-white p-4 rounded shadow">
-                <h2 class="font-bold"><?= htmlspecialchars($product['name']) ?></h2>
-                <p class="text-gray-600">¥<?= $product['price'] ?></p>
-            </div>
-        <?php endforeach; ?>
-    </div>
-</body>
-</html>
+```bash
+php bin/ink routes         # 列出所有网址、对应文件、参数个数、允许的方法
+php bin/ink check          # 语法 + 项目规则检查（提交前跑一次）
+php bin/ink test           # 运行 tests/*.txt 路由表
+php bin/ink migrate        # 执行 migrations/*.sql 里新的迁移
 ```
 
-### htmx交互（无需写JS）
+**后台登录**（示例 `/admin`）：复制 `.env.php.example` 为 `.env.php`，把 `APP_ENV` 改成 `'dev'`，按文件里的注释生成 `ADMIN_PASSWORD_HASH`。
+本机开发时 `.env.php` 不是必需的；但只要有这个文件，它的 `APP_ENV` 就优先于 `bin/ink serve` 设置的 `dev`。
 
-```php
-<?php
-// products/delete.php
-require_once '../_core/init.php';
-require_login();
-
-if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    $id = $_GET['id'] ?? 0;
-    $db->delete('products', ['id' => $id]);
-    echo '';  // 返回空，元素消失
-    exit;
-}
-?>
-```
-
-```html
-<!-- 前端 -->
-<button hx-delete="/products/delete?id=123"
-        hx-target="#product-123"
-        hx-swap="outerHTML"
-        hx-confirm="确定删除？"
-        class="bg-red-500 text-white px-4 py-2 rounded">
-    删除
-</button>
-```
-
-## 路由规则
-
-### 两步对撞
-
-访问 `/product/edit` 时，Nginx按此顺序查找：
+## 目录
 
 ```
-1. /product/edit.php          ← 精确文件匹配
-2. /product.php?key1=edit     ← 参数回溯
+public/      网站根目录：只有 index.php、静态文件（assets/）和上传文件（uploads/）
+pages/       页面：网址 = 文件
+layouts/     页面外框（layout('site')）和错误页（error.php）
+partials/    可复用片段（partial('name')）
+migrations/  SQL 迁移
+ink/         内核
+bin/ink      命令行
+storage/     日志、session、限流计数、SQLite 数据库（不进 git）
+tests/       路由表
+deploy/      nginx / 宝塔 配置和部署指南
 ```
 
-访问 `/123` 时（单段路径）：
+## 和 AI 一起用
 
-```
-1. /123.php                   ← 精确文件匹配
-2. /index.php?key1=123        ← 回溯到根目录
-```
-
-### URL映射
-
-```
-URL                      文件
-/                   →    index.php
-/about              →    about.php
-/123                →    index.php?key1=123
-/product            →    product.php
-/product/edit       →    product/edit.php
-/product/123        →    product.php?key1=123
-/admin/user         →    admin/user.php 或 admin.php?key1=user
-```
+让你的 AI 编程助手先读 **[AGENTS.md](AGENTS.md)**。那是完整的开发契约：每个函数的签名、行为和例子，路由规则，安全规则，`bin/ink check` 检查什么，以及三个完整的单文件示例。
+读完它，不需要读内核源码就能正确地写功能。
 
 ## 文档
 
-- [开发指南](DEVELOPMENT.md) - 完整开发文档
-- [架构设计](ARCHITECTURE.md) - 设计原理
-- [Nginx配置](NGINX.md) - 服务器配置
+| 文档 | 内容 |
+|---|---|
+| [AGENTS.md](AGENTS.md) | 开发契约：函数参考、路由、安全、测试、示例（给 AI，也给人） |
+| [deploy/README.md](deploy/README.md) | 部署：nginx、宝塔、Apache、Cloudflare、PHP-FPM 池、目录权限 |
+| [docs/SPEC.md](docs/SPEC.md) | 设计规格（英文），代码和文档都以它为准 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变化，以及从 0.x 迁移 |
 
-## 对比
+## 不做什么
 
-|  | inkphp | Laravel | ThinkPHP |
-|---|--------|---------|----------|
-| 文件大小 | <1MB | 50MB+ | 30MB+ |
-| 学习时间 | 1天 | 1个月 | 2周 |
-| 依赖 | 0 | Composer | Composer |
-| 路由速度 | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
-| 适合场景 | 中小项目 | 大型项目 | 中大项目 |
+MVC、ORM / 查询构造器、插件、主题、中间件、依赖注入容器、事件、模板引擎、构建步骤。需要它们的项目，更适合用 Laravel / Symfony。
+inkphp 适合官网、落地页、后台、中小型应用和 API，也适合"让 AI 帮你写、你来审"的项目。
 
-## 适用场景
+## 许可证
 
-✅ **适合：**
-- 个人博客/官网
-- 管理后台
-- 中小型应用
-- 快速原型
-- 学习PHP
-
-❌ **不适合：**
-- 超大型应用（>100页面）
-- 超高并发（>5000 QPS）
-- 微服务架构
-
-## 技术栈
-
-- PHP 8.2+
-- Medoo（数据库）
-- htmx（前端交互）
-- Tailwind CSS（样式）
-- MySQL/PostgreSQL
-
-## 性能
-
-```
-单服务器：2000-5000 QPS
-响应时间：<20ms
-内存占用：<2MB/请求
-```
-
-够用于日活10万以下的应用。
-
-## 社区
-
-- 官网：https://inkphp.com
-- GitHub：https://github.com/yourname/inkphp
-- 讨论：GitHub Issues
-
-## 贡献
-
-欢迎贡献！请遵循：
-1. 保持极简
-2. 不破坏向后兼容
-3. 添加测试
-4. 更新文档
-
-## 许可
-
-MIT License
-
-## 致谢
-
-- [Medoo](https://medoo.in) - 优雅的数据库框架
-- [htmx](https://htmx.org) - 高效的交互库
-- [Tailwind CSS](https://tailwindcss.com) - 实用的CSS框架
-
----
-
-**think less. ink more.** - 让开发回归简单
+MIT
