@@ -153,6 +153,18 @@ are percent-encoded.
   A page whose params are optional (min < max) and that allows any method besides GET/HEAD/OPTIONS must call allow()
   at least twice, otherwise `bin/ink check` errors (POST meant for /x would also run for /x/5).
 
+### 4.6 Language in the URL (config locale_url)
+- 'prefix': ink_route() strips a leading segment equal to one of config('locales') before resolving (it is not a param).
+  The default (first) locale has no prefix (/zh/x → 301 /x) unless locale_default_prefixed, then a bare /x → 302 (307 for
+  non-GET) to /<Accept-Language best>/x with Vary: Accept-Language. pages/<locale>(.php) is unreachable (check error).
+- 'query': only ?lang= decides; missing → default; ?lang=<default> or an unknown value → 301 without it.
+- false: locale() from ?lang= (stores a cookie) > cookie > Accept-Language > default (one URL for all languages).
+- In 'prefix'/'query' the URL alone decides (no cookie, no Accept-Language), so cache_public() is not downgraded for language.
+- `href(string $path, ?string $locale = null): string` localizes a local path; `locale_urls(): array` = this page in every
+  locale + 'x-default' (relative). require_login() defaults to href('/login'). wants_json() looks at the routed path.
+- `bin/ink check`: warns on hard-coded href/action/hx-* "/…" in HTML and redirect('/…') when locale_url is on, and on
+  t([...]) arrays missing a configured locale. Test tables may set `@config key=value …` (in-process only).
+
 ### 4.5 as_id(?string $v): ?int
 - Converts a path param to a record id: null → null; a canonical positive integer (`^[1-9][0-9]{0,17}$`) → int;
   anything else ('01', '0', '-1', '1e3', 'abc', 19+ digits) → abort(404). One record has exactly one URL.

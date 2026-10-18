@@ -5,11 +5,11 @@
 params();
 allow('GET', 'POST');
 
-$next = $_GET['next'] ?? '/admin';
+$next = $_GET['next'] ?? href('/admin');
 // A path on this site only: never "//evil.com", "/\evil.com", "https://evil.com" or control characters
 // ("/<tab>/evil.com" is read as "//evil.com" by browsers). redirect() refuses those too; this picks a better default.
 if (!is_string($next) || !preg_match('~^/(?![/\\\\])[^\x00-\x1f\x7f]*$~D', $next)) {
-    $next = '/admin';
+    $next = href('/admin');
 }
 if (user() !== null) redirect($next);              // already logged in
 

@@ -6,4 +6,4 @@ allow('POST');
 csrf_check();
 logout();
 flash('ok', t(['zh' => '已退出登录。', 'en' => 'You are logged out.']));
-redirect('/', 303);
+redirect(href('/'), 303);

@@ -17,7 +17,7 @@
 <body>
     <h1><?= e($code) ?></h1>
     <p><?= e($message) ?></p>
-    <p><a href="/">← Home / 首页</a></p>
+    <p><a href="<?= e(href('/')) ?>">← Home / 首页</a></p>
     <small>ref <?= e($rid) ?></small>
 </body>
 </html>

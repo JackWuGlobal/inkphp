@@ -1,0 +1,12 @@
+# Language in the query string (config locale_url = query), Reddit style: /about?lang=fr. No ?lang = default.
+@pages tests/fixtures/pages
+@config locale_url=query locales=en,fr
+
+GET     /about                -> 200 pages/about.php []
+GET     /about?lang=fr        -> 200 pages/about.php []
+GET     /about?x=1&lang=fr    -> 200 pages/about.php []
+GET     /about?lang=en        -> 301 /about                    # the default language has no ?lang
+GET     /about?lang=en&x=1    -> 301 /about?x=1
+GET     /about?lang=de        -> 301 /about                    # unknown language → the clean URL
+GET     /about?x=1&lang=      -> 301 /about?x=1
+GET     /product/42?lang=fr   -> 200 pages/product.php ["42"]

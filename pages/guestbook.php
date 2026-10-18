@@ -18,7 +18,7 @@ if (is_post()) {
     if (!$errors) {
         q('INSERT INTO guestbook (name, message) VALUES (?, ?)', [$form['name'], $form['message']]);
         flash('ok', t(['zh' => '谢谢留言！', 'en' => 'Thanks for your message!']));
-        redirect('/guestbook', 303);               // a reload of the next page never posts twice
+        redirect(href('/guestbook'), 303);               // a reload of the next page never posts twice
     }
     http_response_code(422);                       // show the form again, with the errors and the input
 }
@@ -54,7 +54,7 @@ layout('site', ['title' => t(['zh' => '留言板', 'en' => 'Guestbook'])]);
 ?>
 <h1><?= e(t(['zh' => '留言板', 'en' => 'Guestbook'])) ?></h1>
 
-<form class="box" method="post" action="/guestbook">
+<form class="box" method="post" action="<?= e(href('/guestbook')) ?>">
     <?= csrf_field() ?>
 
     <label for="name"><?= e(t(['zh' => '名字', 'en' => 'Name'])) ?></label>
@@ -76,9 +76,9 @@ layout('site', ['title' => t(['zh' => '留言板', 'en' => 'Guestbook'])]);
 
 <h2>
     <?= e(t(['zh' => '最新留言', 'en' => 'Latest messages'])) ?>
-    <button type="button" class="link" hx-get="/guestbook" hx-target="#entries"><?= e(t(['zh' => '刷新', 'en' => 'Refresh'])) ?></button>
+    <button type="button" class="link" hx-get="<?= e(href('/guestbook')) ?>" hx-target="#entries"><?= e(t(['zh' => '刷新', 'en' => 'Refresh'])) ?></button>
 </h2>
 <!-- htmx reloads the list every 30 s, and when "Refresh" is clicked -->
-<div id="entries" hx-get="/guestbook" hx-trigger="every 30s">
+<div id="entries" hx-get="<?= e(href('/guestbook')) ?>" hx-trigger="every 30s">
     <?php $list($entries, $empty) ?>
 </div>

@@ -6,6 +6,7 @@
 # "pages/…" means a file in the pages directory in use. Paths are used as written; over HTTP only bytes outside
 # printable ASCII are percent-encoded first (as browsers do: php -S drops raw UTF-8 request lines).
 @pages tests/fixtures/pages
+@config locale_url=false                            # these lines test routing alone; languages: tests/locale-*.txt
 
 # --- the root page, and the "index" segment -------------------------------------------------------
 GET     /                                  -> 200 pages/index.php []

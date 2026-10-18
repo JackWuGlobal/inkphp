@@ -70,7 +70,47 @@ function ink_location(string $canon, string $query): string
     return preg_replace_callback('/[^\x21-\x7e]|\\\\/', fn (array $m): string => rawurlencode($m[0]), $canon . $query);
 }
 
-/** Canonical redirect, then resolve; returns the page file for public/index.php to require. */
+/**
+ * Language from the URL (config locale_url). Returns [locale|null, path to resolve, redirect|null] where redirect is
+ * [Location, code]. Pure (no $_GET/$_SERVER), so `bin/ink test` uses it too.
+ * prefix: '/en/about' → ['en', '/about']. The default language has no prefix ('/zh/about' → 301 '/about') unless
+ *   locale_default_prefixed, in which case a bare '/about' → 302 '/<Accept-Language best>/about'.
+ * query: '/about?lang=en' → ['en', '/about']; ?lang=<default> or an unknown value → 301 without it.
+ * off: [null, path, null].
+ */
+function ink_locale_route(string $canon, string $query, string $acceptLanguage = ''): array
+{
+    $mode = ink_locale_mode();
+    if ($mode === false) return [null, $canon, null];
+    $all = array_values((array) config('locales', ['zh', 'en']));
+    $def = (string) ($all[0] ?? 'en');
+    if ($mode === 'prefix') {
+        $prefixed = (bool) config('locale_default_prefixed', false);
+        $seg = explode('/', $canon, 3)[1] ?? '';
+        if ($seg !== '' && in_array($seg, $all, true)) {
+            $rest = substr($canon, strlen($seg) + 1);
+            $rest = $rest === '' ? '/' : $rest;
+            if ($seg === $def && !$prefixed) return [$def, $rest, [ink_location($rest, $query), 301]];
+            return [$seg, $rest, null];
+        }
+        if (!$prefixed) return [$def, $canon, null];
+        $best = ink_accept_language($all, $acceptLanguage) ?? $def;
+        return [$best, $canon, [ink_location('/' . $best . ($canon === '/' ? '' : $canon), $query), 302]];
+    }
+    $pairs = $query === '' ? [] : explode('&', substr($query, 1));
+    $lang = null;
+    $other = [];
+    foreach ($pairs as $pair) {
+        [$k, $v] = explode('=', $pair, 2) + [1 => ''];
+        if (urldecode($k) === 'lang') $lang ??= urldecode($v);
+        else $other[] = $pair;
+    }
+    if ($lang === null) return [$def, $canon, null];
+    if ($lang !== $def && in_array($lang, $all, true)) return [$lang, $canon, null];
+    return [$def, $canon, [ink_location($canon, $other ? '?' . implode('&', $other) : ''), 301]];
+}
+
+/** Canonical redirect, language from the URL, then resolve; returns the page file for public/index.php to require. */
 function ink_route(): string
 {
     $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
@@ -78,14 +118,22 @@ function ink_route(): string
     $path = $q === false ? $uri : substr($uri, 0, $q);
     $canon = ink_canonical($path);
     if ($canon === null) abort(400);
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     if ($canon !== $path) {
-        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         ink_redirect(ink_location($canon, $q === false ? '' : substr($uri, $q)), $method === 'GET' || $method === 'HEAD' ? 301 : 308);
     }
-    [$file, $params] = ink_resolve(INK_ROOT . '/pages', $canon) ?? abort(404);
+    [$locale, $path, $redirect] = ink_locale_route($canon, $q === false ? '' : substr($uri, $q), (string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
+    if ($redirect !== null) {
+        $safe = $method === 'GET' || $method === 'HEAD';
+        if ($redirect[1] === 302) header('Vary: Accept-Language'); // depends on the visitor: never cached for everyone
+        ink_redirect($redirect[0], $redirect[1] === 302 ? ($safe ? 302 : 307) : ($safe ? 301 : 308));
+    }
+    [$file, $params] = ink_resolve(INK_ROOT . '/pages', $path) ?? abort(404);
     $s = &ink_state();
     $s['page'] = $file;
     $s['params'] = $params;
+    $s['locale_url'] = $locale;
+    $s['route_path'] = $path;
     return $file;
 }
 

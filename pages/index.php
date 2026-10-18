@@ -36,7 +36,7 @@ $examples = [
         <tbody>
             <?php foreach ($examples as [$url, $file, $what]): ?>
                 <tr>
-                    <td><?php if ($url[0] === '/'): ?><a href="<?= e($url) ?>"><?= e($url) ?></a><?php else: ?><?= e($url) ?><?php endif ?></td>
+                    <td><?php if ($url[0] === '/'): ?><a href="<?= e(href($url)) ?>"><?= e(href($url)) ?></a><?php else: ?><?= e($url) ?><?php endif ?></td>
                     <td><code><?= e($file) ?></code></td>
                     <td><?= e(t($what)) ?></td>
                 </tr>
