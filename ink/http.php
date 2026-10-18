@@ -9,8 +9,7 @@ function is_htmx(): bool { return ($_SERVER['HTTP_HX_REQUEST'] ?? '') === 'true'
 /** Accept mentions application/json, or the path is /api or under /api/. */
 function wants_json(): bool
 {
-    // the routed path: /en/api/notes counts as /api/notes in prefix mode
-    $path = (string) (ink_state()['route_path'] ?? explode('?', (string) ($_SERVER['REQUEST_URI'] ?? ''), 2)[0]);
+    $path = explode('?', (string) ($_SERVER['REQUEST_URI'] ?? ''), 2)[0];
     return str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
         || preg_match('~^/api(/|$)~', $path) === 1;
 }

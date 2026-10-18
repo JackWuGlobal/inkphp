@@ -19,7 +19,7 @@ function ink_cli(array $argv): int
     }
     $cmd = $argv[1] ?? 'help';
     if (in_array($cmd, ['routes', 'check', 'test'], true)) {
-        require __DIR__ . '/ink.php'; // the whole kernel (config, locales, href…); in the CLI it sends nothing and buffers nothing
+        require __DIR__ . '/route.php';
         set_error_handler(function (int $no, string $msg, string $file, int $line): bool {
             if (!(error_reporting() & $no)) return false;
             throw new ErrorException($msg, 0, $no, $file, $line);
@@ -75,15 +75,12 @@ function ink_cli_page(string $file): array
     static $cache = [];
     if (isset($cache[$file])) return $cache[$file];
     $t = [];
-    $line = 1;
     foreach (token_get_all((string) file_get_contents($file)) as $tok) {
-        $tok = is_array($tok) ? $tok : [0, $tok, $line];
-        $line = $tok[2] + substr_count($tok[1], "\n");
-        if (!in_array($tok[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $t[] = [$tok[0], $tok[1], $tok[2]];
+        $tok = is_array($tok) ? $tok : [0, $tok];
+        if (!in_array($tok[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $t[] = [$tok[0], $tok[1]];
     }
     $uses = $names = $decl = [];
     $allows = 0;
-    $texts = $links = $redirects = []; // t([...]) keys, hard-coded local links in HTML, redirect('/literal') — by line
     foreach ($t as $i => [$type, $text]) {
         $prev = strtolower($t[$i - 1][1] ?? '');
         if (in_array($type, [T_STRING, T_NAME_FULLY_QUALIFIED], true) && ($t[$i + 1][1] ?? '') === '('
@@ -93,17 +90,6 @@ function ink_cli_page(string $file): array
             if ($fn === 'allow') $allows++;
             $arg = ($t[$i + 2][0] ?? 0) === T_CONSTANT_ENCAPSED_STRING ? ink_cli_literal([$t[$i + 2]]) : null;
             if ($fn === 'layout' && is_string($arg)) $names[] = [$fn, $arg];
-            if ($fn === 'redirect' && is_string($arg) && str_starts_with($arg, '/')) $redirects[] = $t[$i][2];
-            if ($fn === 't' && ($t[$i + 2][1] ?? '') === '[') { // the literal keys of t(['zh' => …, 'en' => …])
-                $keys = [];
-                for ($j = $i + 3, $depth = 0; isset($t[$j]); $j++) {
-                    $x = $t[$j][1];
-                    if ($x === '[' || $x === '(') $depth++;
-                    elseif ($x === ']' || $x === ')') { if ($depth-- === 0) break; }
-                    elseif ($depth === 0 && $t[$j][0] === T_CONSTANT_ENCAPSED_STRING && ($t[$j + 1][1] ?? '') === '=>') $keys[] = substr($x, 1, -1);
-                }
-                $texts[] = [$t[$i][2], $keys];
-            }
         } elseif ($type === T_VARIABLE && in_array($text, ['$_POST', '$_FILES', '$_REQUEST', '$_GET', '$_SERVER'], true)) {
             $uses[$text] = true;
             $key = ($t[$i + 1][1] ?? '') === '[' ? ($t[$i + 2][1] ?? '') : '';
@@ -111,8 +97,6 @@ function ink_cli_page(string $file): array
             if ($text === '$_SERVER' && preg_match('/^[\'"]REQUEST_METHOD[\'"]$/', $key)) $uses["\$_SERVER['REQUEST_METHOD']"] = true;
         } elseif ($type === T_CONSTANT_ENCAPSED_STRING && strtolower(substr($text, 1, -1)) === 'php://input') {
             $uses['php://input'] = true; // reading the request body by hand
-        } elseif ($type === T_INLINE_HTML && preg_match_all('~\b(?:href|action|hx-(?:get|post|put|patch|delete))="/(?![/\\\\])~', $text, $m, PREG_OFFSET_CAPTURE)) {
-            foreach ($m[0] as [, $off]) $links[] = $t[$i][2] + substr_count(substr($text, 0, $off), "\n");
         }
     }
     $stmt = [];
@@ -132,8 +116,7 @@ function ink_cli_page(string $file): array
         elseif (in_array($text, [')', ']', '}'], true)) $depth--;
         $stmt[] = [$type, $text];
     }
-    return $cache[$file] = ['decl' => $decl, 'uses' => $uses, 'names' => $names, 'allows' => $allows,
-        'texts' => $texts, 'links' => $links, 'redirects' => $redirects];
+    return $cache[$file] = ['decl' => $decl, 'uses' => $uses, 'names' => $names, 'allows' => $allows];
 }
 
 /** One statement → ['fn', 'args', 'vars' (destructured names)] if it is a declaration call; true for declare/use. */
@@ -277,7 +260,6 @@ function ink_cli_routes(string $pages): int
         $notes = array_keys(array_filter(['login' => isset($p['uses']['require_login']), 'csrf' => isset($p['uses']['csrf_check'])]));
         foreach ($p['names'] as [$kind, $name]) if ($kind === 'layout') $notes[] = "layout:$name";
         if (!isset($lead['params'])) $notes[] = isset($p['uses']['params']) ? 'params()-not-first' : 'no-params()';
-        if (ink_locale_mode() !== false && ink_locale_exempt($static === '' ? '/' : $static)) $notes[] = 'no-lang';
         $rows[$static . "\0" . $rel] = [$url === '' ? '/' : $url, ink_cli_rel("$pages/$rel"),
             $range === null ? '?' : ($range[0] === $range[1] ? "$range[0]" : "$range[0]-$range[1]"),
             $methods === null ? '?' : implode(' ', array_diff($methods, ['HEAD']) ?: ['HEAD']), implode(' ', array_unique($notes))];
@@ -290,16 +272,6 @@ function ink_cli_routes(string $pages): int
         echo rtrim(implode('  ', array_map(fn (string $c, int $k): string => str_pad($c, $w[$k]), $r, array_keys($r)))), "\n";
     }
     if ($hidden) echo "($hidden file(s) in " . ink_cli_rel($pages) . " are not routable: _private, .hidden or see bin/ink check)\n";
-    $all = array_values((array) config('locales', ['zh', 'en']));
-    $def = (string) ($all[0] ?? 'en');
-    $prefixed = (bool) config('locale_default_prefixed', false);
-    $others = array_values(array_filter($all, fn (string $l): bool => $l !== $def || $prefixed));
-    if (ink_locale_mode() === 'prefix') {
-        echo 'languages: every URL above also exists as /' . implode('/…, /', $others) . '/…'
-            . ($prefixed ? " (bare URLs redirect by Accept-Language)\n" : " ($def = no prefix)\n");
-    } elseif (ink_locale_mode() === 'query') {
-        echo 'languages: ?lang=' . implode(', ?lang=', array_diff($all, [$def])) . " ($def = no ?lang)\n";
-    }
     return 0;
 }
 
@@ -318,19 +290,6 @@ function ink_cli_check(): int
         $msg = preg_grep('/error:/i', $out) ?: $out;
         if ($code !== 0) $issues[] = ['error', $rel, str_replace(" in $root/$rel", '', trim((string) reset($msg)))];
     }
-    $locales = array_values((array) config('locales', ['zh', 'en']));
-    if (ink_locale_mode() === 'prefix') {
-        foreach ($locales as $l) {
-            if (is_file("$root/pages/$l.php") || is_dir("$root/pages/$l")) {
-                $issues[] = ['error', "pages/$l", "'/$l' is a language prefix (config locale_url = prefix): this page can never be reached; rename it"];
-            }
-        }
-    }
-    foreach ((array) config('locale_exempt', []) as $x) {
-        if (!is_string($x) || !preg_match('~^/[a-z0-9._/-]*$~D', $x) || $x === '/') {
-            $issues[] = ['error', 'config.php', "locale_exempt entry '" . (is_string($x) ? $x : gettype($x)) . "' must be a path prefix like '/admin' (not '/')"];
-        }
-    }
     if (is_dir("$root/partials")) {
         $issues[] = ['error', 'partials/', 'shared fragments were removed in 1.0: move the HTML into each page that uses it (in-page closure, see AGENTS.md 页面内片段), then delete partials/'];
     }
@@ -343,14 +302,6 @@ function ink_cli_check(): int
             $p = ink_cli_page("$root/$file");
             if (isset($p['uses']['keyN'])) $issues[] = ['error', $file, "\$_GET['keyN'] is 0.x: path params come from params()"];
             if (isset($p['uses']['partial'])) $issues[] = ['error', $file, 'partial() was removed in 1.0: put the fragment in this page (in-page closure, see AGENTS.md 页面内片段)'];
-            foreach ($p['texts'] as [$at, $keys]) {
-                $missing = $keys ? array_diff($locales, $keys) : [];
-                if ($missing) $issues[] = ['warn', "$file:$at", "t([...]) has no '" . implode("', '", $missing) . "' text"];
-            }
-            if (ink_locale_mode() !== false) { // links and redirects that would drop the visitor's language
-                foreach ($p['links'] as $at) $issues[] = ['warn', "$file:$at", 'hard-coded local link: write href="<?= e(href(\'/…\')) ?>" to keep the language'];
-                foreach ($p['redirects'] as $at) $issues[] = ['warn', "$file:$at", "redirect('/…') drops the language: redirect(href('/…'))"];
-            }
             foreach ($p['names'] as [$kind, $name]) {
                 if (!preg_match('~^[a-z0-9_/-]+$~D', $name) || !is_file("$root/{$kind}s/$name.php")) {
                     $issues[] = ['error', $file, "$kind('$name'): {$kind}s/$name.php does not exist"];
@@ -461,14 +412,10 @@ function ink_cli_expect(string $pages, string $method, string $raw): array
     $path = $q === false ? $raw : substr($raw, 0, $q);
     $canon = ink_canonical($path);
     if ($canon === null) return [400, null];
-    $safe = in_array($method, ['GET', 'HEAD'], true);
     if ($canon !== $path) { // the Location exactly as ink_route() builds it
-        return [$safe ? 301 : 308, ink_location($canon, $q === false ? '' : substr($raw, $q))];
+        return [in_array($method, ['GET', 'HEAD'], true) ? 301 : 308, ink_location($canon, $q === false ? '' : substr($raw, $q))];
     }
-    // the language step exactly as ink_route() does it (a test request sends no Accept-Language)
-    [$locale, $routed, $redirect] = ink_locale_route($canon, $q === false ? '' : substr($raw, $q));
-    if ($redirect !== null) return [$redirect[1] === 302 ? ($safe ? 302 : 307) : ($safe ? 301 : 308), $redirect[0]];
-    [$file, $params] = ink_resolve($pages, $routed) ?? [null, []];
+    [$file, $params] = ink_resolve($pages, $canon) ?? [null, []];
     if ($file === null) return [404, null];
     $p = ink_cli_page($file);
     $called = [];
@@ -486,8 +433,8 @@ function ink_cli_expect(string $pages, string $method, string $raw): array
         } elseif ($d['fn'] === 'csrf_check') {
             return [403, null];
         } elseif ($d['fn'] === 'require_login') {
-            if (preg_match('~^/api(/|$)~', $routed)) return [401, null];
-            $login = (string) ($d['args'][0] ?? ($locale === null ? '/login' : href('/login', $locale)));
+            if (preg_match('~^/api(/|$)~', $path)) return [401, null];
+            $login = (string) ($d['args'][0] ?? '/login');
             $to = $login . (str_contains($login, '?') ? '&' : '?') . 'next=' . rawurlencode($raw);
             $exit = [302, preg_match('~^/(?![/\\\\])~', $to) && !preg_match('/[\x00-\x1f\x7f]/', $to) ? $to : '/'];
             break; // a redirect still gets ink_finish()'s checks, with what was called so far
@@ -549,18 +496,6 @@ function ink_cli_test(array $files, array $opts): int
             continue;
         }
         $pages = $http === null ? ink_cli_dir((string) ($opts['pages'] ?? $dir ?? 'pages')) : '';
-        // "@config key=value …" overrides config.php for this table, in-process only (over --http the server decides)
-        $state = &ink_state();
-        $savedConfig = $state['config'];
-        if ($http === null) {
-            foreach (preg_grep('/^\s*@config\s/', $lines) as $c) {
-                foreach (preg_split('/\s+/', trim(substr(trim($c), 7))) as $kv) {
-                    [$k, $v] = explode('=', $kv, 2) + [1 => ''];
-                    $state['config'][$k] = $k === 'locales' || str_contains($v, ',') ? explode(',', $v)
-                        : (in_array($v, ['false', 'off', '0'], true) ? false : (in_array($v, ['true', 'on', '1'], true) ? true : $v));
-                }
-            }
-        }
         $ran++;
         $n = ['passed' => 0, 'failed' => 0, 'skipped' => 0];
         foreach ($lines as $i => $line) {
@@ -592,8 +527,6 @@ function ink_cli_test(array $files, array $opts): int
                 echo ($pass ? 'ok    ' : 'FAIL  ') . "$where  $line" . ($pass ? '' : "\n      got: $show") . "\n";
             }
         }
-        $state['config'] = $savedConfig;
-        unset($state);
         $failed += $n['failed'];
         echo "$name: {$n['passed']} passed, {$n['failed']} failed" . ($n['skipped'] ? ", {$n['skipped']} skipped (the page decides: use --http)" : '')
             . ($http === null ? '  [in-process, ' . ink_cli_rel($pages) . ']' : "  [$http]") . "\n";

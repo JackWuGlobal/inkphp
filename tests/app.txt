@@ -61,16 +61,3 @@ GET     /api/nope                -> 404
 # --- robots.txt is a page (pages/robots.txt.php) ----------------------------------------------------
 GET     /robots.txt              -> 200 pages/robots.txt.php []
 GET     /robots.txt.php          -> 301 /robots.txt
-
-# --- languages (config.php: locale_url = prefix, locales zh,en; zh has no prefix) -----------------------
-GET     /en                      -> 200 pages/index.php []
-GET     /en/about                -> 200 pages/about.php []
-GET     /en/guestbook            -> 200 pages/guestbook.php []
-GET     /en/search/ink           -> 200 pages/search.php ["ink"]
-GET     /zh/about                -> 301 /about                 # the default language is never prefixed
-GET     /en/about.php            -> 301 /en/about
-GET     /en/admin                -> 301 /admin                 # locale_exempt: the admin has one URL
-GET     /admin                   -> 302 /login?next=%2Fadmin    # …and so does the login page
-POST    /en/api/notes            -> 308 /api/notes            # locale_exempt: APIs have no language prefix
-GET     /en/login                -> 301 /login
-GET     /fr/about                -> 404                       # fr is not a configured language

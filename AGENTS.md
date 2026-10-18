@@ -30,7 +30,7 @@ layout('site', ['title' => 'Hello']);
 1. **一个网址 = 一个文件 = 一个功能。** 读一个页面文件就能知道这个网址的全部行为。不要把一个功能拆到多个文件里，也不要让一个文件服务彼此无关的功能。
 2. **没有隐式执行。** 页面的每个依赖都是页面里一次显式的调用。不准添加守卫文件、中间件、`auto_prepend_file`、"每个请求都会 include 的文件"或运行时扫描源码。
 3. **默认安全。** 最短的写法就是安全的写法：`e()` 转义，参数化 SQL，`csrf_field()`/`csrf_check()`，只跳本站的 `redirect()`，页面源码不在网站根目录，上传文件永远不会被执行。
-4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、46 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
+4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、44 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
 5. **零依赖，零构建。** PHP ≥ 8.2（目标 8.4）。部署 = 复制文件 / `git pull`。
 
 **不做**：MVC、ORM/查询构造器（没有 Medoo）、插件、主题、中间件、依赖注入容器、事件、模板引擎。不要把它们加回来。
@@ -186,40 +186,6 @@ allow('GET', 'POST');         // 只接受这些方法；GET 自动包含 HEAD�
   顺序会影响结果：`allow()` 写在 `require_login()` 后面时，未登录的 POST 得到的是收尾时的 405，而不是跳转登录。
 
 ---
-
-### 4.4 多语言网址（`config('locale_url')`）
-
-每种语言一个网址，**页面文件仍然只有一个**。在 `config.php` 里选一种方式：
-
-| `locale_url` | 网址 | 适合 |
-|---|---|---|
-| `'prefix'`（示例应用用这个） | `/about`（默认语言 zh）、`/en/about` | 从一开始就是多语言的网站：官网、文档、落地页 |
-| `'query'` | `/about`、`/about?lang=en`（Reddit 的做法） | 给已有网址追加翻译版本 |
-| `false` | 只有 `/about`，语言来自 cookie / `Accept-Language` | 后台、内部工具（对搜索引擎和 CDN 不友好） |
-
-- **prefix**：内核先去掉开头的语言段，再按 §4.2 找页面，`/en/about` 和 `/about` 都由 `pages/about.php` 处理，**语言段不是路径参数**。
-  默认语言没有前缀：`/zh/about` → 301 `/about`。`'locale_default_prefixed' => true` 时所有语言都带前缀，不带前缀的 `/about` → 302 到访客浏览器语言对应的版本（带 `Vary: Accept-Language`）。
-  `/de/about`（不在 `locales` 里）、`/EN/about`（前缀区分大小写）就是普通的未知页面 → 404。
-  不要在 `pages/` 下建和语言同名的文件或目录（`pages/en.php`、`pages/en/`）：永远到不了，`bin/ink check` 报错。
-- **query**：只看 `?lang=`；没有就是默认语言。`?lang=<默认语言>`、未知值 → 301 到去掉它的网址。
-- 两种方式下语言**只由网址决定**：不写 cookie，不看 `Accept-Language`，所以每个语言版本都可以 `cache_public()`。
-- **不参与多语言的网址**（后台、登录、API）：在 `config.php` 里明确列出路径前缀，`'locale_exempt' => ['/admin', '/login', '/logout', '/api']`。
-  这些网址只有一个地址、一种语言（默认语言，即 `locales` 的第一个）：不加前缀、不按浏览器语言跳转，`/en/admin` → 301 `/admin`，
-  `?lang=` 被去掉；`href('/admin')` 永远是 `/admin`；`locale_urls()` 对它们每种语言都给同一个网址。`'/admin'` 匹配 `/admin` 和 `/admin/…`，
-  不匹配 `/administrator`。`bin/ink routes` 在这些页面后标 `no-lang`。
-
-页面里只需要两件事：
-1. **文字**照常用 `t(['zh' => …, 'en' => …])`（§6.4）。
-2. **所有站内链接和跳转都经过 `href()`**，它会带上当前语言：
-   ```php
-   <a href="<?= e(href('/about')) ?>">…</a>              // /about 或 /en/about
-   <form method="post" action="<?= e(href('/guestbook')) ?>">
-   <div hx-get="<?= e(href('/search')) ?>" …>
-   redirect(href('/guestbook'), 303);
-   ```
-   `bin/ink check` 会对 HTML 里直接写的 `href="/…"`、`action="/…"`、`hx-get="/…"` 以及 `redirect('/…')` 给出警告。
-   `require_login()` 默认跳到 `href('/login')`，`next=` 是当前完整网址（带语言），登录后会回到同一语言。
-3. 布局里用 `locale_urls()` 输出语言切换链接和 `hreflang` / canonical 标签（`layouts/site.php` 已经写好）。
 
 ## 5. 页面骨架
 
@@ -449,32 +415,12 @@ layout('site', ['title' => '留言']);
 长段落的双语内容用 `<?php if (locale() === 'zh'): ?> … <?php else: ?> … <?php endif ?>`。
 
 **`locale(mixed $set = null): string`**
-当前语言，取值来自 `config('locales')`（默认 `['zh', 'en']`）。
-`locale_url` 是 `'prefix'` 或 `'query'` 时：**由网址决定**（§4.4），不写 cookie；`locale('en')` 只改本次请求后面的部分。
-`locale_url` 是 `false` 时，优先级：`locale('en')` > 查询串 `?lang=en` > cookie `lang` > `Accept-Language`（按 q 值；先精确匹配，再匹配主标签：`zh-CN` → `zh`）> 第一个配置的语言。
+当前语言，取值来自 `config('locales')`（默认 `['zh', 'en']`）。优先级：`locale('en')` > 查询串 `?lang=en` > cookie `lang` > `Accept-Language`（按 q 值；先精确匹配，再匹配主标签：`zh-CN` → `zh`）> 第一个配置的语言。
 `locale($x)` 和 `?lang=` 会写 `lang` cookie（1 年、Lax、HttpOnly，值变了才发）。**不是配置里的语言字符串的值（未知的值、数组、`null`）会被忽略**，所以 `locale($_GET['l'] ?? null)` 这种写法是安全的（`?l[]=en` 也不会出错）。
 结果来自 cookie、`Accept-Language` 或默认语言时，这个响应因访客而异，`cache_public()` 会在收尾时被降级。
 ```php
 <html lang="<?= e(locale()) ?>">
-```
-
-**`href(string $path, ?string $locale = null): string`**
-站内链接，带上当前语言（或指定的 `$locale`）。prefix：`href('/about')` → `/en/about`（默认语言不加前缀）；query：→ `/about?lang=en`；
-`locale_url` 为 `false` 时原样返回（只有指定 `$locale` 时加 `?lang=`，用于语言切换）。查询串和 `#锚点` 保留；已经带语言的路径原样返回（除非指定 `$locale`）。
-不是站内路径（`//x`、`https://…`）→ `LogicException`。输出到 HTML 时照样 `e()`。
-```php
-<a href="<?= e(href('/guestbook')) ?>">…</a>
-redirect(href('/admin'), 303);
-<a href="<?= e(href('/about', 'en')) ?>" hreflang="en">English</a>
-```
-
-**`locale_urls(): array`**
-当前页面在每种语言下的网址（相对路径），外加 `x-default`：`['zh' => '/about', 'en' => '/en/about', 'x-default' => '/about']`。
-用于语言切换和 SEO 标签，绝对网址用 `url()` 包一层：
-```php
-<?php foreach (locale_urls() as $code => $u): ?>
-    <link rel="alternate" hreflang="<?= e($code) ?>" href="<?= e(url($u)) ?>">
-<?php endforeach ?>
+<a href="?lang=en">English</a>
 ```
 
 ### 6.5 数据（只有 PDO）
@@ -808,9 +754,6 @@ exit;
 | `base_url` | `''` | `url()` 用的固定前缀，例如 `'https://example.com'` |
 | `trust_proxy` | `false` | 只有在源站只接受你自己的代理连接时才设 `true`（`is_https()` 才会相信 `X-Forwarded-Proto`，日志的 `rid` 才用 `CF-Ray`） |
 | `locales` | `['zh', 'en']` | 支持的语言，第一个是默认语言 |
-| `locale_url` | `'prefix'`（示例） | 语言放在网址里的方式：`'prefix'`、`'query'` 或 `false`（§4.4） |
-| `locale_default_prefixed` | `false` | prefix 模式下默认语言是否也带前缀 |
-| `locale_exempt` | `[]`（示例：`['/admin', '/login', '/logout', '/api']`） | 不参与多语言的路径前缀（§4.4） |
 | `session_lifetime` | `86400` | session 闲置多少秒后失效（每次开启 session 时检查） |
 | `db.dsn` / `db.user` / `db.pass` | SQLite | 见 §6.5 |
 
@@ -880,9 +823,6 @@ exit;
 | warn / error | `allow()` 允许了 GET/HEAD/OPTIONS 以外的方法，却从没调用 `csrf_check()`。普通页面是 warn，`pages/admin.php` 和 `pages/admin/…` 是 error |
 | warn | 开头的声明里直接写了 `csrf_check()`，但页面同时允许 GET（每个 GET 都会 403） |
 | error | `pages/admin.php` 和 `pages/admin/…` 的开头声明里没有 `require_login()` |
-| error | prefix 模式下 `pages/` 里有和语言同名的文件或目录（`pages/en.php`、`pages/en/`） |
-| warn | 语言放在网址里时（§4.4），HTML 里直接写的 `href="/…"`、`action="/…"`、`hx-get="/…"` 或 `redirect('/…')`：会丢掉当前语言，改用 `href()` |
-| warn | `t([...])` 缺少某个配置的语言 |
 | error | 参数可选（`params(0, 1)` 这类 min < max）、又允许了 GET 以外的方法，但整页只调用了一次 `allow()`：要写明带参数的网址接受哪些方法，例如 `if ($id !== null) allow('GET');`（§4.3） |
 | warn | `params()` / `allow()` 的参数不是字面量 |
 | error | `layout('x')` 指向的文件不存在 |
@@ -982,8 +922,9 @@ echo "imported $n\n";
 - 写成功后 `redirect(…, 303)`；校验失败回显表单并 `http_response_code(422)`。
 - 路径参数和查询串当作不可信输入来校验。
 - 登录、表单、API 加 `rate_limit()`（按 IP 用 `ip_key()`，登录再按账号）；数据归属在 SQL 里检查（`AND owner_id = ?`）。
-- 界面文字用 `t(['zh' => …, 'en' => …])` 就地写齐所有配置的语言。
-- 站内链接、表单 `action`、`hx-get`/`hx-post`、`redirect()` 一律经过 `href()`（§4.4）。
+- 界面文字用 `t(['zh' => …, 'en' => …])` 就地写两种语言。
+- 内核不管网址里的语言。要给每种语言独立网址时，页面自己选一种：`?lang=en`（`locale()` 会读它）、
+  一种语言一个目录（`pages/en/about.php`，各写一份），或者写死的网址。
 - 新表写成 `migrations/NNN_*.sql`；新机密同时加进 `.env.php.example`。
 - 改完运行 `php bin/ink check`；给新网址在 `tests/app.txt` 里加几行。
 

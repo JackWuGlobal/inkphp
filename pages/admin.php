@@ -18,7 +18,7 @@ if (is_post()) {
         exit;
     }
     flash('ok', t(['zh' => '已删除。', 'en' => 'Deleted.']));
-    redirect(href('/admin'), 303);
+    redirect('/admin', 303);
 }
 
 $count = val('SELECT COUNT(*) FROM guestbook');
@@ -55,8 +55,8 @@ layout('site', ['title' => t(['zh' => '后台', 'en' => 'Admin'])]);
                         <td class="msg"><?= e($row['message']) ?></td>
                         <td><?= e(substr((string) $row['created_at'], 0, 16)) ?></td>
                         <td>
-                            <form method="post" action="<?= e(href('/admin')) ?>"
-                                hx-post="<?= e(href('/admin')) ?>" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="<?= e($confirm) ?>">
+                            <form method="post" action="/admin"
+                                hx-post="/admin" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="<?= e($confirm) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="delete" value="<?= e($row['id']) ?>">
                                 <button class="danger"><?= e(t(['zh' => '删除', 'en' => 'Delete'])) ?></button>

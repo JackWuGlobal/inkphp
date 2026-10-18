@@ -104,16 +104,12 @@ function user(): int|string|null
     return is_int($id) || is_string($id) ? $id : null;
 }
 
-/**
- * Return the user id, or stop: 401 JSON for wants_json(), else redirect to $loginPath?next=<this path>.
- * $loginPath defaults to href('/login'): the login page in the visitor's current language.
- */
-function require_login(?string $loginPath = null): int|string
+/** Return the user id, or stop: 401 JSON for wants_json(), else redirect to $loginPath?next=<this path>. */
+function require_login(string $loginPath = '/login'): int|string
 {
     $id = user();
     if ($id !== null) return $id;
     if (wants_json()) abort(401);
-    $loginPath ??= href('/login');
     $next = (string) ($_SERVER['REQUEST_URI'] ?? '/');
     redirect($loginPath . (str_contains($loginPath, '?') ? '&' : '?') . 'next=' . rawurlencode($next));
 }

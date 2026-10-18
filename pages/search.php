@@ -49,11 +49,11 @@ layout('site', ['title' => t(['zh' => '搜索', 'en' => 'Search'])]);
 ?>
 <h1><?= e(t(['zh' => '搜索留言', 'en' => 'Search messages'])) ?></h1>
 
-<form class="row" method="get" action="<?= e(href('/search')) ?>" role="search">
+<form class="row" method="get" action="/search" role="search">
     <input type="search" name="q" value="<?= e($q) ?>" maxlength="100" autofocus
         aria-label="<?= e(t(['zh' => '搜索', 'en' => 'Search'])) ?>"
         placeholder="<?= e(t(['zh' => '输入名字或留言内容…', 'en' => 'Type a name or some words…'])) ?>"
-        hx-get="<?= e(href('/search')) ?>" hx-trigger="input changed delay:300ms, search" hx-target="#results">
+        hx-get="/search" hx-trigger="input changed delay:300ms, search" hx-target="#results">
     <button><?= e(t(['zh' => '搜索', 'en' => 'Search'])) ?></button>
 </form>
 <?php if ($errors): ?>

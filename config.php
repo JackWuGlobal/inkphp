@@ -6,12 +6,6 @@ return [
     'base_url' => '',           // e.g. 'https://example.com' for url(); '' = scheme + Host of the request
     'trust_proxy' => false,     // true only behind a proxy you control: is_https() then trusts X-Forwarded-Proto
     'locales' => ['zh', 'en'],  // first = default
-    // Language in the URL: 'prefix' → /about (zh) and /en/about · 'query' → /about?lang=en (Reddit style) ·
-    // false → one URL, language from the lang cookie / Accept-Language (not good for SEO or CDN caching).
-    'locale_url' => 'prefix',
-    'locale_default_prefixed' => false, // prefix mode: true → /zh/about too, and a bare /about redirects by Accept-Language
-    // URLs outside the language system (one address, one language): back office, login, APIs. Path prefixes.
-    'locale_exempt' => ['/admin', '/login', '/logout', '/api'],
     'session_lifetime' => 86400, // seconds a session may stay idle
     'db' => [
         'dsn' => 'sqlite:' . INK_ROOT . '/storage/db.sqlite',

@@ -16,7 +16,7 @@ function &ink_state(): array
 {
     static $s = ['config' => [], 'env' => [], 'page' => null, 'params' => [], 'params_called' => false,
         'allow_called' => false, 'layout' => null, 'response' => null, 'finished' => false, 'upload_error' => null,
-        'locale_varies' => false, 'locale_url' => null, 'route_path' => null];
+        'locale_varies' => false];
     return $s;
 }
 
