@@ -35,7 +35,6 @@ inkphp/
 │   └── uploads/            # store_upload() target (gitignored except .gitkeep)
 ├── pages/                  # URL = file. Never reachable directly (outside docroot).
 ├── layouts/                # page frames, used only via an explicit layout('name') call
-├── partials/               # reusable fragments, used only via an explicit partial('name') call
 ├── migrations/             # NNN_name.sql, applied in order by `bin/ink migrate`
 ├── ink/                    # the kernel (projects vendor a copy; INK_VERSION constant)
 │   ├── ink.php             # loads the other kernel files in order; nothing else
@@ -43,7 +42,7 @@ inkphp/
 │   ├── route.php           # canonical redirect, resolver, params(), allow(), page runner, finish
 │   ├── http.php            # input/json/redirect/abort/is_post/is_htmx/wants_json/host/is_https/url/client_ip/
 │   │                       #   ip_key/cache_public/store_upload/upload_error/asset
-│   ├── view.php            # e/layout/partial/t/locale
+│   ├── view.php            # e/layout/t/locale
 │   ├── data.php            # db/q/one/all/val/tx/validate
 │   ├── auth.php            # session/flash/csrf_*/login/logout/user/require_login/rate_limit
 │   └── cli.php             # bin/ink implementation
@@ -160,8 +159,12 @@ are percent-encoded.
   (`$content` always wins over a `$vars['content']`). Not applied when the response is JSON/redirect/abort, or when
   the page later calls `layout(null)` (e.g. htmx fragment responses). Calling layout() is optional.
   An invalid name or a missing file → LogicException at the call.
-- `partial(string $name, array $vars = []): string` — renders `partials/<name>.php` in an isolated scope, returns HTML.
-  Name must match `^[a-z0-9_/-]+$`, no `..`; invalid or missing → LogicException.
+- **No shared fragments.** There is no partial() and no partials/ directory: a fragment shared between pages couples
+  them (changing it for one page silently breaks another — found in the 1.0 AI-usability review). HTML a page needs lives
+  in that page; similar HTML on two pages is written twice. HTML printed twice by the SAME page (full page + htmx
+  response) is an in-page closure (`$list = function (array $rows): void { ?>…<?php };`). layouts/ is the only shared
+  template and only reads variables passed explicitly via layout(), each with a default. `bin/ink check` errors on any
+  partial() call or a partials/ directory.
 - `asset(string $path): string` — `/assets/<path>?v=<filemtime>`; missing file → still returns path (logs warning in dev).
 - `t(array|string $s, array $vars = []): string` — inline translations first:
   `t(['zh' => '提交', 'en' => 'Submit'])` picks locale(), then config('locales')[0], then the first value.
@@ -316,7 +319,7 @@ when run as root.
     leading csrf_check() on a page that allows GET (warning: every GET gets 403);
   - pages in the admin area — `pages/admin.php` and everything under `pages/admin/` — have require_login() as a
     leading statement (error);
-  - no `$_GET['keyN']` in pages/layouts/partials; literal layout('x')/partial('x') names exist;
+  - no `$_GET['keyN']` in pages/layouts; literal layout('x') names exist; no partial() calls and no partials/ dir;
   - no PHP file (`.php`, `.php5`/`.php7`…, `.phtml`, `.phar`) in public/ except index.php; storage/ and its logs/,
     sessions/, ratelimit/ writable; public/uploads writable (warning); .env.php not tracked by git — found by reading
     .git/index (versions 2–4) directly, never by running git, so no repository config (core.fsmonitor, hooks) runs

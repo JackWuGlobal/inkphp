@@ -21,9 +21,27 @@ if ($q !== '') {
 }
 $empty = $q === '' ? '' : t(['zh' => '没有找到“{q}”。', 'en' => 'Nothing found for “{q}”.'], ['q' => $q]);
 
+// In-page fragment, printed twice below (htmx results and full page). This is search's own copy of an entry list:
+// it reads only the columns selected above, so changing the guestbook page can never break this one.
+$list = function (array $rows, string $empty): void { ?>
+    <?php if (!$rows): ?>
+        <p class="muted"><?= e($empty) ?></p>
+    <?php else: ?>
+        <ul class="entries">
+            <?php foreach ($rows as $row): ?>
+                <li>
+                    <strong><?= e($row['name']) ?></strong>
+                    <span class="muted"><?= e(substr((string) $row['created_at'], 0, 16)) ?> UTC</span>
+                    <p class="msg"><?= e($row['message']) ?></p>
+                </li>
+            <?php endforeach ?>
+        </ul>
+    <?php endif ?>
+<?php };
+
 header('Vary: HX-Request');                        // one URL, two responses: keep caches apart
 if (is_htmx()) {
-    echo partial('entries', ['entries' => $results, 'empty' => $empty]);
+    $list($results, $empty);
     exit;                                          // just the results: layout() was never called
 }
 
@@ -43,5 +61,5 @@ layout('site', ['title' => t(['zh' => '搜索', 'en' => 'Search'])]);
 <?php endif ?>
 
 <div id="results">
-    <?= partial('entries', ['entries' => $results, 'empty' => $empty]) ?>
+    <?php $list($results, $empty) ?>
 </div>

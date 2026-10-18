@@ -68,7 +68,7 @@ function ink_cli_serve(string $port): int
 /**
  * A page's declarations: 'decl' = its leading statements that are calls to params/allow/require_login/csrf_check/
  * layout, in order (args: literals, false = not a literal); 'uses' = every function it calls explicitly and the
- * superglobals it touches; 'names' = literal layout()/partial() names.
+ * superglobals it touches; 'names' = literal layout() names.
  */
 function ink_cli_page(string $file): array
 {
@@ -87,7 +87,7 @@ function ink_cli_page(string $file): array
             $fn = strtolower(ltrim($text, '\\'));
             $uses[$fn] = true;
             $arg = ($t[$i + 2][0] ?? 0) === T_CONSTANT_ENCAPSED_STRING ? ink_cli_literal([$t[$i + 2]]) : null;
-            if (($fn === 'layout' || $fn === 'partial') && is_string($arg)) $names[] = [$fn, $arg];
+            if ($fn === 'layout' && is_string($arg)) $names[] = [$fn, $arg];
         } elseif ($type === T_VARIABLE && in_array($text, ['$_POST', '$_FILES', '$_REQUEST', '$_GET', '$_SERVER'], true)) {
             $uses[$text] = true;
             $key = ($t[$i + 1][1] ?? '') === '[' ? ($t[$i + 2][1] ?? '') : '';
@@ -288,7 +288,10 @@ function ink_cli_check(): int
         $msg = preg_grep('/error:/i', $out) ?: $out;
         if ($code !== 0) $issues[] = ['error', $rel, str_replace(" in $root/$rel", '', trim((string) reset($msg)))];
     }
-    foreach (['pages', 'layouts', 'partials'] as $dir) {
+    if (is_dir("$root/partials")) {
+        $issues[] = ['error', 'partials/', 'shared fragments were removed in 1.0: move the HTML into each page that uses it (in-page closure, see AGENTS.md 页面内片段), then delete partials/'];
+    }
+    foreach (['pages', 'layouts'] as $dir) {
         foreach (ink_cli_files("$root/$dir") as $rel) {
             $file = "$dir/$rel";
             $why = $dir === 'pages' ? ink_cli_routable($rel) : str_ends_with($rel, '.php');
@@ -296,6 +299,7 @@ function ink_cli_check(): int
             if (!str_ends_with($rel, '.php')) continue;
             $p = ink_cli_page("$root/$file");
             if (isset($p['uses']['keyN'])) $issues[] = ['error', $file, "\$_GET['keyN'] is 0.x: path params come from params()"];
+            if (isset($p['uses']['partial'])) $issues[] = ['error', $file, 'partial() was removed in 1.0: put the fragment in this page (in-page closure, see AGENTS.md 页面内片段)'];
             foreach ($p['names'] as [$kind, $name]) {
                 if (!preg_match('~^[a-z0-9_/-]+$~D', $name) || !is_file("$root/{$kind}s/$name.php")) {
                     $issues[] = ['error', $file, "$kind('$name'): {$kind}s/$name.php does not exist"];

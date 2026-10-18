@@ -30,7 +30,7 @@ layout('site', ['title' => 'Hello']);
 1. **一个网址 = 一个文件 = 一个功能。** 读一个页面文件就能知道这个网址的全部行为。不要把一个功能拆到多个文件里，也不要让一个文件服务彼此无关的功能。
 2. **没有隐式执行。** 页面的每个依赖都是页面里一次显式的调用。不准添加守卫文件、中间件、`auto_prepend_file`、"每个请求都会 include 的文件"或运行时扫描源码。
 3. **默认安全。** 最短的写法就是安全的写法：`e()` 转义，参数化 SQL，`csrf_field()`/`csrf_check()`，只跳本站的 `redirect()`，页面源码不在网站根目录，上传文件永远不会被执行。
-4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、44 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
+4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、43 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
 5. **零依赖，零构建。** PHP ≥ 8.2（目标 8.4）。部署 = 复制文件 / `git pull`。
 
 **不做**：MVC、ORM/查询构造器（没有 Medoo）、插件、主题、中间件、依赖注入容器、事件、模板引擎。不要把它们加回来。
@@ -48,7 +48,6 @@ inkphp/
 │   └── uploads/            # store_upload() 保存的文件（不进 git）
 ├── pages/                  # 网址 = 文件。在网站根目录之外，不能被直接访问
 ├── layouts/                # 页面外框，只在页面调用 layout('name') 时使用；error.php = 错误页
-├── partials/               # 可复用片段，只在调用 partial('name') 时使用
 ├── migrations/             # NNN_name.sql，php bin/ink migrate 按文件名顺序执行
 ├── ink/                    # 内核（ink.php 按顺序加载其余文件；cli.php = bin/ink）
 ├── bin/ink                 # 命令行：serve / routes / check / test / migrate
@@ -63,10 +62,14 @@ inkphp/
 └── docs/SPEC.md            # 设计规格
 ```
 
-新增功能 = 在 `pages/` 下新建一个文件（必要时加一个 `migrations/NNN_*.sql`、一个 `partials/*.php`）。几乎不需要碰其他地方。
-**修改**已有的东西时不一定只动一个文件：改共享的局部模板见 §6.4，给已有的表加字段见 §12。
+新增功能 = 在 `pages/` 下新建一个文件（必要时加一个 `migrations/NNN_*.sql`）。几乎不需要碰其他地方。
+**修改**已有的功能 = 改它那一个页面文件。只有改表结构时要多动几个文件（新的迁移 + 每个读写这张表的页面，见 §12）。
 
-**共享代码**：共享 HTML 用 `partial()`。确实要共享的 PHP 函数（很少需要），放在 `pages/` 以外的目录（例如 `lib/money.php`），
+**不共享 HTML 片段**：inkphp 没有 `partial()`，也没有 `partials/` 目录。一个页面需要的 HTML 全部写在这个页面里；
+两个页面显示类似的东西（例如都列出留言），就**各写一份**。少量重复换来的是：改一个页面永远不会弄坏另一个页面。
+同一个页面里要输出两次的片段（例如整页和 htmx 刷新），写成**页面内片段**（§6.4）。
+唯一共享的模板是 `layouts/`（页面外框），它只通过 `layout()` 拿到明确传入的变量。
+确实要共享的 PHP 函数（很少需要，例如金额格式化），放在 `pages/` 以外的目录（例如 `lib/money.php`），
 由用到它的页面在骨架声明之后显式写 `require_once INK_ROOT . '/lib/money.php';`。不要做任何自动加载。
 
 ---
@@ -116,7 +119,7 @@ public/index.php → require ink/ink.php（启动）→ require ink_route()（�
 - 规范路径按 `/` 切段，每段 `rawurldecode` **一次**。
 - 段解码后是 `.`、`..`、含 `/` `\` NUL 或控制字符、或不是合法 UTF-8 → 404。超过 12 段 → 404。
 - 能当作文件路径一部分的段（"路由名"）必须匹配 `^[a-z0-9][a-z0-9._-]*$`（小写 ASCII），并且不等于 `index`；另外 `.well-known` 也算合法的路由名。
-  以 `_` 或 `.` 开头的文件和目录**永远不会被路由**（可以放私有文件，但请优先用 `partials/`）。
+  以 `_` 或 `.` 开头的文件和目录**永远不会被路由**。
 - 从最长的前缀开始试：`pages/a/b/c.php` → `pages/a/b.php` → `pages/a.php`，第一个存在的文件胜出，**剩下的段就是路径参数**（字符串）。
 - 都不存在 → `pages/index.php`，所有段都是它的参数。`/` → `pages/index.php`，没有参数。
 - **路径参数不会放进 `$_GET`。** `$_GET` 只有查询串。
@@ -247,7 +250,7 @@ if (is_post()) { csrf_check(); /* … */ }
 
 **`is_htmx(): bool`** — 是否 htmx 请求（`HX-Request: true`）。
 ```php
-if (is_htmx()) { echo partial('rows', ['rows' => $rows]); exit; }   // 只回片段
+if (is_htmx()) { $list($rows); exit; }   // 只回片段（$list 是本页的页面内片段，§6.4）
 ```
 
 **`wants_json(): bool`** — `Accept` 含 `application/json`，或路径是 `/api` / 以 `/api/` 开头。`abort()`、错误页、`require_login()` 用它决定回 JSON 还是 HTML。
@@ -356,14 +359,33 @@ layout('site', ['title' => t(['zh' => '报名', 'en' => 'Sign up'])]);
 if (is_htmx()) layout(null);         // htmx 请求只要片段
 ```
 
-**`partial(string $name, array $vars = []): string`**
-渲染 `partials/<name>.php`（名字匹配 `^[a-z0-9_/-]+$`，可以有子目录），返回 HTML 字符串。只能看到 `$vars`。文件不存在 → `LogicException`。
-返回值是 HTML，**不要**再 `e()` 一次；转义由局部模板自己负责。
+**页面内片段**（没有 `partial()`）
+同一个页面里要输出两次的 HTML（典型是：整页里显示一次，htmx 请求时只回这一段），在页面里写成一个闭包，调用两次：
 ```php
-<?= partial('entries', ['entries' => $rows, 'empty' => t(['zh' => '暂无', 'en' => 'None'])]) ?>
+$rows = all('SELECT id, name, message FROM guestbook ORDER BY id DESC LIMIT 50');
+
+// 页面内片段：只读上面 SELECT 出来的列
+$list = function (array $rows): void { ?>
+    <ul>
+        <?php foreach ($rows as $r): ?>
+            <li><strong><?= e($r['name']) ?></strong> <?= e($r['message']) ?></li>
+        <?php endforeach ?>
+    </ul>
+<?php };
+
+header('Vary: HX-Request');
+if (is_htmx()) { $list($rows); exit; }   // htmx：只回片段，不套布局
+
+layout('site', ['title' => '留言']);
+?>
+<div id="list" hx-get="/guestbook" hx-trigger="every 30s"><?php $list($rows) ?></div>
 ```
-**局部模板的约定**：文件开头的注释写明谁在用它（调用它的页面）、它读哪些变量和哪些键（例如 `partials/entries.php`：`$entries` 的每行有 `name`、`message`、`created_at`）。
-修改局部模板、让它多读一个键之前，先找出所有调用方：`grep -rn "partial('entries'" pages partials layouts`，把每个调用方的 `SELECT` 都改上；或者把新键当作可选的来读：`$row['email'] ?? null`。否则别的页面会 500（dev）或少一列并记 `warn`（prod）。改完更新文件开头的注释。
+规则：
+- 闭包只在**本页**用，写在用到它之前；参数明确传进去，不用 `use`/`global` 偷偷读外面的变量（`t()` 文本也作为参数传入）。
+- 闭包里照样每个变量都 `e()`。
+- 另一个页面需要类似的列表 → 在那个页面里**再写一份**，不要跨页面共享。改其中一个，另一个不受影响。
+- 布局（`layouts/*.php`）是唯一共享的模板：只读 `layout()` 传进来的变量和 `$content`，每个变量都要有默认值（`$title ?? ''`），
+  这样哪个页面少传一个变量都不会出错。给布局加新变量时，用默认值兼容所有现有页面。
 
 **`asset(string $path): string`** — `/assets/<path>?v=<修改时间>`，文件一改网址就变（缓存失效）。文件不存在时返回不带 `?v=` 的路径（`dev` 下记 `warn`）。
 ```php
@@ -597,7 +619,7 @@ if (is_post()) {
 ```
 
 **htmx**（`public/assets/htmx.min.js`，htmx 2.0.11，sha256 `d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717`，来源和升级方法见 `public/assets/VENDOR.txt`；`layouts/site.php` 已经引入）：
-- 同一个网址既返回整页也返回片段：`if (is_htmx()) { echo partial('rows', […]); exit; }`（在调用 `layout()` 之前退出，或者调用 `layout(null)`）。同时发 `header('Vary: HX-Request');`。
+- 同一个网址既返回整页也返回片段：用页面内片段（§6.4），`if (is_htmx()) { $list($rows); exit; }`（在调用 `layout()` 之前退出，或者调用 `layout(null)`）。同时发 `header('Vary: HX-Request');`。
 - 写操作用 `hx-post`。把 `hx-post` 放在包含 `csrf_field()` 的 `<form>` 上，token 会随表单字段提交，而且不开 JS 时普通提交也能用。
   不在表单里的按钮，要在外层元素上带上请求头：`<div hx-headers="<?= e(json_encode(['X-CSRF-Token' => csrf_token()])) ?>">`。
 - 删除一行：`hx-target="closest tr" hx-swap="outerHTML"`，页面返回空响应（`exit;`），这一行就会消失。
@@ -640,7 +662,7 @@ exit;
 
 | 要做的事 | 怎么做 |
 |---|---|
-| 输出转义 | HTML 里的每个变量都 `<?= e($x) ?>`。例外只有三个：`partial()` 的返回值、布局里的 `$content`、`csrf_field()`（它们本身就是 HTML） |
+| 输出转义 | HTML 里的每个变量都 `<?= e($x) ?>`。例外只有两个：布局里的 `$content`、`csrf_field()`（它们本身就是 HTML） |
 | SQL 注入 | 只用 `q/one/all/val` 加占位符。值永远放在 `$params` 里 |
 | CSRF | 每个改数据的请求先 `csrf_check()`；每个 POST 表单放 `csrf_field()` |
 | 方法 | 处理 POST 的页面第二行写 `allow('GET', 'POST')` 或 `allow('POST')`。**GET 请求绝不改数据** |
@@ -734,20 +756,20 @@ exit;
 - 迁移文件：`migrations/NNN_描述.sql`（`001_guestbook.sql`、`002_notes.sql` …）。按文件名排序依次执行，每个文件一个事务，已执行的记录在 `ink_migrations` 表里。**已经执行过的文件不要改**，要改就新建一个文件。
 - 执行：`php bin/ink migrate`。生产环境要以 PHP 的运行用户执行：`sudo -u www-data php bin/ink migrate`。
 - MySQL 的 DDL 会自动提交，所以 MySQL 上的迁移不是原子的。一个文件里尽量只放一件事。
-- **约定**：每个迁移文件第一行注释写明用到这张表的页面和局部模板（例如 `-- Guestbook entries: used by pages/guestbook.php, pages/search.php and pages/admin.php.`），改表结构时照着它找。
+- **约定**：每个迁移文件第一行注释写明用到这张表的页面（例如 `-- Guestbook entries: used by pages/guestbook.php, pages/search.php and pages/admin.php.`），改表结构时照着它找。
 
 **给已有的表加字段**（不改旧文件，新建一个迁移）：
 1. 新建 `migrations/NNN_add_x.sql`：
    ```sql
-   -- guestbook.email: used by pages/guestbook.php, partials/entries.php
+   -- guestbook.email: used by pages/guestbook.php
    ALTER TABLE guestbook ADD COLUMN email VARCHAR(254) NULL;
    ```
    SQLite 不允许直接加 `NOT NULL` 且没有默认值的列：要么允许 `NULL`，要么写 `NOT NULL DEFAULT ''`。一条 `ALTER TABLE` 只加一列（SQLite 的限制）。
 2. 找出所有读写这张表的地方，逐个更新（`SELECT` 列表、`INSERT` 的列、`validate()` 规则、表单）：
    ```bash
-   grep -rn -E '(FROM|INTO|UPDATE|JOIN) +guestbook\b' pages partials layouts lib
+   grep -rn -E '(FROM|INTO|UPDATE|JOIN) +guestbook\b' pages layouts lib
    ```
-   局部模板读到新列时，所有调用它的页面都要 `SELECT` 这一列（§6.4）。
+   每个页面只读它自己 `SELECT` 出来的列，所以只有真正要显示新字段的页面才需要改。
 3. `php bin/ink migrate`，然后在 dev 下把相关页面都点一遍。
 - 可移植的写法：
   - 主键用 `INTEGER PRIMARY KEY`（SQLite），PostgreSQL 用 `BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`。
@@ -788,7 +810,8 @@ exit;
 | warn | 开头的声明里直接写了 `csrf_check()`，但页面同时允许 GET（每个 GET 都会 403） |
 | error | `pages/admin.php` 和 `pages/admin/…` 的开头声明里没有 `require_login()` |
 | warn | `params()` / `allow()` 的参数不是字面量 |
-| error | `layout('x')` / `partial('x')` 指向的文件不存在 |
+| error | `layout('x')` 指向的文件不存在 |
+| error | 调用了 `partial()`，或者存在 `partials/` 目录（1.0 已移除共享片段：把 HTML 写进页面，见 §6.4） |
 | error | 使用了 0.x 的 `$_GET['key1']` 写法 |
 | error | `public/` 下除 `index.php` 外还有 PHP 文件（`.php`、`.php5`/`.php7`…、`.phtml`、`.phar`） |
 | error / warn | `storage/`、`storage/logs`、`storage/sessions`、`storage/ratelimit` 不可写（error）；`public/uploads` 不可写（warn） |
@@ -865,6 +888,7 @@ exit;
 - 不要 `echo` 或 `<?=` 没转义的输入（`$_GET`、`$_POST`、`input()`、数据库内容、路径参数）。
 - 不要拼接 SQL 字符串（`"… WHERE id = $id"`、`'…' . $_GET['x']`）。
 - 不要添加会隐式运行的文件：守卫文件、中间件、`_bootstrap.php`、`auto_prepend_file`、`.user.ini` 里的 prepend，或者被"约定"自动 include 的文件。
+- 不要跨页面共享 HTML 片段（不要建 `partials/`，不要 `include` 别的页面）。类似的 HTML 在每个页面里各写一份；同一页面内复用用页面内片段（§6.4）。
 - 不要在 `public/` 里放 `.php` 文件（`index.php` 除外）；不要把页面、配置、日志放进 `public/`。
 - 不要在页面里 `require` 内核或 `ink/ink.php`。内核已经加载好了，页面直接调用函数。
 - 不要用 GET 改数据（包括退出登录）；不要从查询串读 CSRF token。
@@ -1107,7 +1131,7 @@ layout('site', ['title' => t(['zh' => '报名管理', 'en' => 'Sign-ups'])]);
 |---|---|---|
 | `/` | `pages/index.php` | `params()`、就地翻译 |
 | `/about` | `pages/about.php` | 普通页面 + 布局，长段落的双语写法 |
-| `/guestbook` | `pages/guestbook.php` | 表单、CSRF、校验、flash、`partial()`、htmx 局部刷新 |
+| `/guestbook` | `pages/guestbook.php` | 表单、CSRF、校验、flash、页面内片段、htmx 局部刷新 |
 | `/search` | `pages/search.php` | htmx 实时搜索、`params(0, 1)` |
 | `/login`、`/logout` | `pages/login.php`、`pages/logout.php` | `password_verify`、限流、只接受本站的 `next=`、POST 退出 |
 | `/admin` | `pages/admin.php` | `require_login()`、htmx 原地删除 |
@@ -1131,7 +1155,6 @@ layout('site', ['title' => t(['zh' => '报名管理', 'en' => 'Sign-ups'])]);
 - **`cache_public()` 和语言**：靠 cookie / `Accept-Language` / 默认值决定语言的页面会被内核自动降级为不缓存（否则 CDN 会把一种语言发给所有人）。需要缓存的多语言页面，用网址区分语言并调用 `locale('en')`。
 - **`cache_public()` 和 `url()`**：`url()` 默认用请求的 Host 头，CDN 会把别人伪造的 Host 缓存给所有人。可缓存的响应里要用 `url()`，先设 `config('base_url')`。
 - **给已有的 POST 页面加路径参数**：`params()` 改成 `params(0, 1)` 后，`POST /x/5` 也会执行原来给 `/x` 写的写操作。在写操作前加 `if (is_post() && $id !== null) abort(404);`（§4.3）。
-- **改了局部模板，别的页面 500**：局部模板多读了一个键，另一个调用它的页面没 `SELECT` 这一列。改之前 `grep -rn "partial('名字'"` 找出所有调用方（§6.4）。
 - **id 有多种写法**：`ctype_digit()` 和 `validate()` 的 `int` 都接受 `'01'`，同一条记录会有多个网址。id 用 `preg_match('/^[1-9][0-9]{0,17}$/D', $id)`（§4.3）。
 - **`.env.php` 覆盖了 `bin/ink serve` 的 `APP_ENV=dev`**：见 §11。
 - **session 锁**：同一用户的请求在 session 开启期间会排队。做慢操作（调用外部 API）之前，如果不再写 session，可以先 `session_write_close()`。

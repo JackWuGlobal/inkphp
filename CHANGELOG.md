@@ -36,12 +36,12 @@
 **页面**
 - 页面移到 `pages/`，在网站根目录之外。`public/` 里只允许 `index.php` 一个 PHP 文件（`bin/ink check` 检查）。
 - 页面必须显式声明：`params(min, max)` 声明接受几个路径参数，`allow(...)` 声明接受哪些请求方法。没声明的参数 → 404，没声明的方法 → 405。
-- 布局和局部模板只在页面调用 `layout()` / `partial()` 时使用，并且在隔离的作用域里渲染。
+- 布局只在页面调用 `layout()` 时使用，并且在隔离的作用域里渲染。**没有跨页面共享的 HTML 片段**（没有 `partial()`、`partials/`）：一个页面要用的 HTML 都写在这个页面里，同一页面内复用写成页面内闭包。
 - 输出全部缓冲：页面任何时候都能设置响应头。
 
 **内核（`ink/`，替代 `_core/`）**
-- 一个只有 44 个公开函数的内核，零依赖：`params allow` · `input json redirect abort is_post is_htmx wants_json host is_https url client_ip ip_key cache_public store_upload upload_error asset` ·
-  `e layout partial t locale` · `db q one all val tx validate` · `session flash csrf_* login logout user require_login rate_limit` · `config env log_info log_error`。
+- 一个只有 43 个公开函数的内核，零依赖：`params allow` · `input json redirect abort is_post is_htmx wants_json host is_https url client_ip ip_key cache_public store_upload upload_error asset` ·
+  `e layout t locale` · `db q one all val tx validate` · `session flash csrf_* login logout user require_login rate_limit` · `config env log_info log_error`。
 - **去掉 Medoo**，改为 PDO 辅助函数 `q/one/all/val/tx`。只写参数化的原生 SQL，PostgreSQL 的 `RETURNING`、`::jsonb` 等都能直接用。
 - 数据库和 session 都是惰性的：用到才连接、才开启。普通页面不发 cookie，可以被 CDN 缓存（`cache_public()`）。
 
@@ -137,4 +137,4 @@
 | `$lang` + `zh.php` / `en.php` + `include all_language/x.php` | 一个页面，文字写成 `t(['zh' => …, 'en' => …])`，语言由 `locale()` 决定（`?lang=en`）。需要 `/en/…` 这类网址时：`pages/en.php` 用 `params(0, N)` 接住后面的段并调用 `locale('en')`，或者在 `pages/en/*.php` 里各自调用 `locale('en')`。注意 `locale($x)` 会写 `lang` cookie，之后访问不带前缀的页面也会是这种语言，而且这些响应不能被 `cache_public()` 缓存 |
 | `require_login()` / `require_role()`（0.x 引用了但仓库里没有 `auth.php`） | `require_login()` 返回用户 id；角色自己查，`abort(403)` |
 | 每个请求都 `session_start()` | 只有 `session()`、`flash()`、`csrf_*`、`login()`、`user()` 等用到时才开启 |
-| `_` 开头的私有文件靠 nginx 返回 403 | 私有文件放在 `pages/` 以外（`partials/`、`layouts/`），或以 `_` 开头（永远不会被路由，返回 404） |
+| `_` 开头的私有文件靠 nginx 返回 403 | 私有文件放在 `pages/` 以外（如 `layouts/`、`lib/`），或以 `_` 开头（永远不会被路由，返回 404） |

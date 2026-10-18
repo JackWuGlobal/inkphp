@@ -62,7 +62,7 @@ curl -sI https://example.com/.env.php    # 404
 
 | 路径 | 谁要写 | 建议 |
 |---|---|---|
-| 代码（`ink/` `pages/` `layouts/` `partials/` `public/` `config.php` …） | 只有部署用户 | PHP 和 nginx 只读 |
+| 代码（`ink/` `pages/` `layouts/` `public/` `config.php` …） | 只有部署用户 | PHP 和 nginx 只读 |
 | `storage/`（`logs/` `sessions/` `ratelimit/` `db.sqlite`） | PHP | 属于 PHP 用户，`o=` 不给其他人读（里面有 session 和数据库） |
 | `public/uploads/` | PHP | 属于 PHP 用户；nginx 要能读（`store_upload()` 存的文件是 0644） |
 | `.env.php` | 没人写 | `640`，组 = PHP 用户 |

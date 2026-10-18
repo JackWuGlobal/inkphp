@@ -26,9 +26,27 @@ if (is_post()) {
 $entries = all('SELECT id, name, message, created_at FROM guestbook ORDER BY id DESC LIMIT 50');
 $empty = t(['zh' => '还没有留言，来写第一条吧。', 'en' => 'No messages yet. Be the first!']);
 
+// In-page fragment: the list is printed twice below (htmx refresh and full page), so it is a closure in THIS file.
+// It reads only the columns selected just above. Other pages that list entries have their own copy on purpose.
+$list = function (array $rows, string $empty): void { ?>
+    <?php if (!$rows): ?>
+        <p class="muted"><?= e($empty) ?></p>
+    <?php else: ?>
+        <ul class="entries">
+            <?php foreach ($rows as $row): ?>
+                <li>
+                    <strong><?= e($row['name']) ?></strong>
+                    <span class="muted"><?= e(substr((string) $row['created_at'], 0, 16)) ?> UTC</span>
+                    <p class="msg"><?= e($row['message']) ?></p>
+                </li>
+            <?php endforeach ?>
+        </ul>
+    <?php endif ?>
+<?php };
+
 header('Vary: HX-Request');                        // one URL, two responses: keep caches apart
 if (is_htmx()) {
-    echo partial('entries', ['entries' => $entries, 'empty' => $empty]);
+    $list($entries, $empty);
     exit;                                          // just the fragment: layout() was never called
 }
 
@@ -62,5 +80,5 @@ layout('site', ['title' => t(['zh' => '留言板', 'en' => 'Guestbook'])]);
 </h2>
 <!-- htmx reloads the list every 30 s, and when "Refresh" is clicked -->
 <div id="entries" hx-get="/guestbook" hx-trigger="every 30s">
-    <?= partial('entries', ['entries' => $entries, 'empty' => $empty]) ?>
+    <?php $list($entries, $empty) ?>
 </div>

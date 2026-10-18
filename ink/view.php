@@ -1,5 +1,6 @@
 <?php
-// Views: escaping, layout, partials, inline translations, locale. See docs/SPEC.md §5.
+// Views: escaping, layout, inline translations, locale. See docs/SPEC.md §5.
+// There is deliberately no partial(): HTML a page needs lives in that page (see AGENTS.md "页面内片段").
 declare(strict_types=1);
 
 /** Escape for HTML text and attributes. null, arrays and non-Stringable objects become ''. */
@@ -17,15 +18,6 @@ function layout(?string $name, array $vars = []): void
         throw new LogicException("layout(): layouts/$name.php does not exist");
     }
     ink_set('layout', $name === null ? null : [$name, $vars]);
-}
-
-/** Render partials/<name>.php with $vars in its own scope and return the HTML. */
-function partial(string $name, array $vars = []): string
-{
-    if (!preg_match('~^[a-z0-9_/-]+$~D', $name) || !is_file(INK_ROOT . "/partials/$name.php")) {
-        throw new LogicException("partial(): partials/$name.php does not exist");
-    }
-    return ink_render(INK_ROOT . "/partials/$name.php", $vars);
 }
 
 /** Include a template with only $__vars in scope; return its output. */
