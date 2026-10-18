@@ -277,6 +277,7 @@ function ink_cli_routes(string $pages): int
         $notes = array_keys(array_filter(['login' => isset($p['uses']['require_login']), 'csrf' => isset($p['uses']['csrf_check'])]));
         foreach ($p['names'] as [$kind, $name]) if ($kind === 'layout') $notes[] = "layout:$name";
         if (!isset($lead['params'])) $notes[] = isset($p['uses']['params']) ? 'params()-not-first' : 'no-params()';
+        if (ink_locale_mode() !== false && ink_locale_exempt($static === '' ? '/' : $static)) $notes[] = 'no-lang';
         $rows[$static . "\0" . $rel] = [$url === '' ? '/' : $url, ink_cli_rel("$pages/$rel"),
             $range === null ? '?' : ($range[0] === $range[1] ? "$range[0]" : "$range[0]-$range[1]"),
             $methods === null ? '?' : implode(' ', array_diff($methods, ['HEAD']) ?: ['HEAD']), implode(' ', array_unique($notes))];
@@ -323,6 +324,11 @@ function ink_cli_check(): int
             if (is_file("$root/pages/$l.php") || is_dir("$root/pages/$l")) {
                 $issues[] = ['error', "pages/$l", "'/$l' is a language prefix (config locale_url = prefix): this page can never be reached; rename it"];
             }
+        }
+    }
+    foreach ((array) config('locale_exempt', []) as $x) {
+        if (!is_string($x) || !preg_match('~^/[a-z0-9._/-]*$~D', $x) || $x === '/') {
+            $issues[] = ['error', 'config.php', "locale_exempt entry '" . (is_string($x) ? $x : gettype($x)) . "' must be a path prefix like '/admin' (not '/')"];
         }
     }
     if (is_dir("$root/partials")) {

@@ -314,7 +314,19 @@ session 的闲置超时不靠清理：每次开启 session 时都会检查（`co
   `style-src 'unsafe-inline'` 是给 htmx 自己插入的指示器样式用的。用了 `hx-on:*` 属性或内联 `<script>` 时，这条 CSP 会拦住它们：改成外部 `.js` 文件，或者按需放宽。
   先用 `Content-Security-Policy-Report-Only` 试一段时间，看浏览器控制台有没有被拦的内容。
 
-## 12. 常见问题
+## 12. 扫描器请求在 nginx 拦截
+
+`/.env`、`/wp-admin`、`/phpmyadmin` 这类请求来自自动扫描器。不要为它们在 PHP 里加钩子，在 nginx 直接拒绝，单独记日志（便于统计），不占用 PHP：
+```nginx
+# server { } 里，放在 location / 之前
+location ~* ^/(\.env|\.git|wp-admin|wp-login\.php|wp-content|xmlrpc\.php|phpmyadmin|pma|adminer|vendor/phpunit|cgi-bin)(/|$) {
+    access_log /var/log/nginx/scanners.log;   # 统计：awk '{print $1, $7}' /var/log/nginx/scanners.log | sort | uniq -c | sort -rn | head
+    return 404;                               # 或 444：直接断开连接
+}
+```
+按需增减路径；别拦截你自己的网址。被拦截的请求不会进入 inkphp，也就不会出现在应用日志里。
+
+## 13. 常见问题
 
 | 现象 | 原因与处理 |
 |---|---|

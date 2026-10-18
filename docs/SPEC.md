@@ -162,6 +162,10 @@ are percent-encoded.
 - In 'prefix'/'query' the URL alone decides (no cookie, no Accept-Language), so cache_public() is not downgraded for language.
 - `href(string $path, ?string $locale = null): string` localizes a local path; `locale_urls(): array` = this page in every
   locale + 'x-default' (relative). require_login() defaults to href('/login'). wants_json() looks at the routed path.
+- `locale_exempt` (path prefixes, e.g. ['/admin', '/login', '/api']): outside the language system. One URL, locale
+  `locale_exempt_locale` (default: first locale): no prefix, no Accept-Language redirect; a prefixed form 301s to the bare
+  one, ?lang= is stripped; href() never localizes them; locale_urls() gives the same URL for every locale. '/admin'
+  matches /admin and /admin/…, not /administrator. `bin/ink routes` marks them no-lang; `check` rejects bad entries.
 - `bin/ink check`: warns on hard-coded href/action/hx-* "/…" in HTML and redirect('/…') when locale_url is on, and on
   t([...]) arrays missing a configured locale. Test tables may set `@config key=value …` (in-process only).
 

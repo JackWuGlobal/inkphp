@@ -83,6 +83,27 @@ function locale(mixed $set = null): string
     return $current = ink_accept_language($all) ?? (string) ($all[0] ?? 'en');
 }
 
+/**
+ * Is this (unprefixed) path outside the language system? config('locale_exempt') lists path prefixes, e.g.
+ * ['/admin', '/login', '/api']: '/admin' and '/admin/…' match, '/administrator' does not. Exempt URLs have one
+ * address and one language: config('locale_exempt_locale', <first locale>).
+ */
+function ink_locale_exempt(string $path): bool
+{
+    foreach ((array) config('locale_exempt', []) as $p) {
+        $p = rtrim((string) $p, '/');
+        if ($p !== '' && ($path === $p || str_starts_with($path, $p . '/'))) return true;
+    }
+    return false;
+}
+
+function ink_exempt_locale(): string
+{
+    $all = array_values((array) config('locales', ['zh', 'en']));
+    $l = config('locale_exempt_locale');
+    return is_string($l) && in_array($l, $all, true) ? $l : (string) ($all[0] ?? 'en');
+}
+
 /** config('locale_url'): 'prefix', 'query' or false. */
 function ink_locale_mode(): string|false
 {
@@ -113,15 +134,19 @@ function href(string $path, ?string $locale = null): string
     if ($mode === 'prefix') {
         $seg = explode('/', $rest, 3)[1] ?? '';
         if (in_array($seg, $all, true)) {
+            $bare = substr($rest, strlen($seg) + 1);
+            $bare = $bare === '' ? '/' : $bare;
+            if (ink_locale_exempt($bare)) return $bare . ($query === '' ? '' : '?' . $query) . $frag;
             if ($locale === null) return $path;          // already names its language
-            $rest = substr($rest, strlen($seg) + 1);
-            $rest = $rest === '' ? '/' : $rest;
+            $rest = $bare;
         }
+        if (ink_locale_exempt($rest)) return $path;      // locale_exempt: one URL, no language
         if ($want !== $def || config('locale_default_prefixed', false)) $rest = '/' . $want . ($rest === '/' ? '' : $rest);
     } else {
         $pairs = $query === '' ? [] : explode('&', $query);
         $other = array_values(array_filter($pairs, fn (string $p): bool => urldecode(explode('=', $p, 2)[0]) !== 'lang'));
         if ($mode === 'query') {
+            if (ink_locale_exempt($rest)) return $rest . ($other ? '?' . implode('&', $other) : '') . $frag;
             if ($locale === null && count($other) !== count($pairs)) return $path; // already names its language
             if ($want !== $def) $other[] = 'lang=' . rawurlencode($want);
         } elseif ($locale !== null) {
@@ -144,6 +169,10 @@ function locale_urls(): array
     $path = (string) (ink_state()['route_path'] ?? ($q === false ? $uri : substr($uri, 0, $q)));
     $base = $path . ($q === false ? '' : substr($uri, $q));
     $out = [];
+    if (ink_locale_mode() !== false && ink_locale_exempt($path)) { // one URL for every language
+        foreach ($all as $l) $out[$l] = $base;
+        return $out + ['x-default' => $base];
+    }
     foreach ($all as $l) $out[$l] = href($base, $l);
     $mode = ink_locale_mode();
     $out['x-default'] = $mode === 'prefix' && config('locale_default_prefixed', false) ? $base : $out[(string) ($all[0] ?? 'en')];

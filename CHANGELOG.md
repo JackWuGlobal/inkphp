@@ -42,7 +42,7 @@
 **内核（`ink/`，替代 `_core/`）**
 - 一个只有 46 个公开函数的内核，零依赖：`params allow as_id` · `input json redirect abort is_post is_htmx wants_json host is_https url client_ip ip_key cache_public store_upload upload_error asset` ·
   `e layout t locale href locale_urls` · `db q one all val tx validate` · `session flash csrf_* login logout user require_login rate_limit` · `config env log_info log_error`。
-- **多语言网址**：`config('locale_url')` 选 `'prefix'`（`/en/about`）、`'query'`（`?lang=en`）或 `false`；同一个页面文件服务所有语言，`href()` 生成带语言的链接，`locale_urls()` 输出语言切换和 hreflang；`bin/ink check` 提示丢语言的链接和缺语言的 `t()`。
+- **多语言网址**：`config('locale_url')` 选 `'prefix'`（`/en/about`）、`'query'`（`?lang=en`）或 `false`；同一个页面文件服务所有语言，`href()` 生成带语言的链接，`locale_urls()` 输出语言切换和 hreflang；`locale_exempt` 列出不参与多语言的网址（后台、登录、API）；`bin/ink check` 提示丢语言的链接和缺语言的 `t()`。
 - **去掉 Medoo**，改为 PDO 辅助函数 `q/one/all/val/tx`。只写参数化的原生 SQL，PostgreSQL 的 `RETURNING`、`::jsonb` 等都能直接用。
 - 数据库和 session 都是惰性的：用到才连接、才开启。普通页面不发 cookie，可以被 CDN 缓存（`cache_public()`）。
 

@@ -69,7 +69,8 @@ GET     /en/guestbook            -> 200 pages/guestbook.php []
 GET     /en/search/ink           -> 200 pages/search.php ["ink"]
 GET     /zh/about                -> 301 /about                 # the default language is never prefixed
 GET     /en/about.php            -> 301 /en/about
-GET     /en/admin                -> 302 /en/login?next=%2Fen%2Fadmin   # require_login() keeps the language
-POST    /en/api/notes            -> 401                       # /en/api is still the API: JSON errors
-GET     /en/api/notes/01         -> http:404
+GET     /en/admin                -> 301 /admin                 # locale_exempt: the admin has one URL
+GET     /admin                   -> 302 /login?next=%2Fadmin    # …and so does the login page
+POST    /en/api/notes            -> 308 /api/notes            # locale_exempt: APIs have no language prefix
+GET     /en/login                -> 301 /login
 GET     /fr/about                -> 404                       # fr is not a configured language

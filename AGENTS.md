@@ -203,6 +203,10 @@ allow('GET', 'POST');         // 只接受这些方法；GET 自动包含 HEAD�
   不要在 `pages/` 下建和语言同名的文件或目录（`pages/en.php`、`pages/en/`）：永远到不了，`bin/ink check` 报错。
 - **query**：只看 `?lang=`；没有就是默认语言。`?lang=<默认语言>`、未知值 → 301 到去掉它的网址。
 - 两种方式下语言**只由网址决定**：不写 cookie，不看 `Accept-Language`，所以每个语言版本都可以 `cache_public()`。
+- **不参与多语言的网址**（后台、登录、API）：在 `config.php` 里明确列出路径前缀，`'locale_exempt' => ['/admin', '/login', '/logout', '/api']`。
+  这些网址只有一个地址、一种语言（`locale_exempt_locale`，默认第一个语言）：不加前缀、不按浏览器语言跳转，`/en/admin` → 301 `/admin`，
+  `?lang=` 被去掉；`href('/admin')` 永远是 `/admin`；`locale_urls()` 对它们每种语言都给同一个网址。`'/admin'` 匹配 `/admin` 和 `/admin/…`，
+  不匹配 `/administrator`。`bin/ink routes` 在这些页面后标 `no-lang`。
 
 页面里只需要两件事：
 1. **文字**照常用 `t(['zh' => …, 'en' => …])`（§6.4）。
@@ -806,6 +810,8 @@ exit;
 | `locales` | `['zh', 'en']` | 支持的语言，第一个是默认语言 |
 | `locale_url` | `'prefix'`（示例） | 语言放在网址里的方式：`'prefix'`、`'query'` 或 `false`（§4.4） |
 | `locale_default_prefixed` | `false` | prefix 模式下默认语言是否也带前缀 |
+| `locale_exempt` | `[]`（示例：`['/admin', '/login', '/logout', '/api']`） | 不参与多语言的路径前缀（§4.4） |
+| `locale_exempt_locale` | 第一个语言 | 这些网址使用的语言 |
 | `session_lifetime` | `86400` | session 闲置多少秒后失效（每次开启 session 时检查） |
 | `db.dsn` / `db.user` / `db.pass` | SQLite | 见 §6.5 |
 
@@ -891,6 +897,34 @@ exit;
 "开头的声明"指文件开头连续的 `params()`、`allow()`、`require_login()`、`csrf_check()`、`layout()` 调用，可以带赋值（如 `[$id] = params(1);`、`$uid = require_login();`）；`declare(...)` 不算打断。
 
 ---
+
+### 13.1 自己写的命令行脚本（数据导入、批处理）
+
+放在 `bin/` 下，一个任务一个文件。开头加载内核，然后直接用 `config()`、`env()`、`q()`/`tx()`、`log_info()`：
+```php
+#!/usr/bin/env php
+<?php
+// bin/import-domains — 从 CSV 导入域名：php bin/import-domains data.csv
+require __DIR__ . '/../ink/ink.php';   // 命令行下内核不发响应头、不缓冲输出；未捕获的异常打印到 STDERR，退出码 1
+
+$file = $argv[1] ?? exit("usage: php bin/import-domains <file.csv>\n");
+$n = tx(function () use ($file): int {
+    $n = 0;
+    foreach (new SplFileObject($file) as $row) {
+        $name = strtolower(trim((string) $row));
+        if ($name === '') continue;
+        q('INSERT INTO domains (name) VALUES (?) ON CONFLICT (name) DO NOTHING', [$name]);
+        $n++;
+    }
+    return $n;
+});
+log_info('domains imported', ['file' => $file, 'rows' => $n]);
+echo "imported $n\n";
+```
+- 用网站同一个用户运行（`sudo -u www-data php bin/xxx`），否则 `storage/` 里会出现 root 的文件。
+- 命令行没有执行时间上限；大批量数据分批提交（每 1000 行一个 `tx()`），不要一次放进一个事务。
+- 页面专用的函数（`params()`、`allow()`、`layout()`、`redirect()`、session、CSRF）在脚本里没有意义，不要用。
+- 定时运行：用 crontab 或 systemd timer 调用（`deploy/README.md`）。不要在网页请求里跑长任务。
 
 ## 14. 测试
 
