@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+_logs/
+*.log
+
+# Config (contains sensitive data)
+_config.php
+
+# Temporary files
+*.tmp
+*.swp
+*~
