@@ -1,6 +1,7 @@
 <?php
 // JSON API for notes (table: migrations/002_notes.sql).
 //   GET  /api/notes?limit=20  → 200 {"notes": [...]}, newest first (limit 1..100, default 20)
+//   GET  /api/notes/<id>      → 200 {"note": {...}} | 404   (id: as_id(), so /api/notes/01 is 404 too)
 //   POST /api/notes           → 201 {"note": {...}}  body {"text": "..."} as JSON, or a form field "text"
 // POST needs a logged-in user and the CSRF token: the X-CSRF-Token header (fetch) or the _csrf form field
 // (a same-site HTML form with csrf_field()). From the site's own JavaScript:
@@ -8,8 +9,14 @@
 //                        body: JSON.stringify({text: 'Hello'})})
 // where token is csrf_token() printed into the page. Under /api every error is JSON, e.g. {"error":401,"message":…}:
 // 400 bad JSON · 401 not logged in · 403 bad CSRF token · 405 other methods · 422 {"errors": {field: message}}.
-params();
-allow('GET', 'POST');
+[$raw] = params(0, 1);                             // /api/notes or /api/notes/<id>
+allow('GET', 'POST');                              // /api/notes: list + create
+$id = as_id($raw);                                 // not a canonical id → 404
+if ($id !== null) allow('GET');                    // /api/notes/<id>: read only (POST → 405 with Allow: GET, HEAD)
+
+if ($id !== null) {
+    json(['note' => one('SELECT id, text, created_at FROM notes WHERE id = ?', [$id]) ?? abort(404)]);
+}
 
 if (is_post()) {
     require_login();                               // → 401 JSON (not a redirect) because this is /api

@@ -30,7 +30,7 @@ layout('site', ['title' => 'Hello']);
 1. **一个网址 = 一个文件 = 一个功能。** 读一个页面文件就能知道这个网址的全部行为。不要把一个功能拆到多个文件里，也不要让一个文件服务彼此无关的功能。
 2. **没有隐式执行。** 页面的每个依赖都是页面里一次显式的调用。不准添加守卫文件、中间件、`auto_prepend_file`、"每个请求都会 include 的文件"或运行时扫描源码。
 3. **默认安全。** 最短的写法就是安全的写法：`e()` 转义，参数化 SQL，`csrf_field()`/`csrf_check()`，只跳本站的 `redirect()`，页面源码不在网站根目录，上传文件永远不会被执行。
-4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、43 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
+4. **小。** Web 内核（`ink/` 下除 `cli.php` 外的文件）约 1000 行（不算空行和注释约 830 行）、44 个公开函数；命令行 `ink/cli.php` 约 570 行，网页请求从不加载它。整个放得进 AI 的上下文。
 5. **零依赖，零构建。** PHP ≥ 8.2（目标 8.4）。部署 = 复制文件 / `git pull`。
 
 **不做**：MVC、ORM/查询构造器（没有 Medoo）、插件、主题、中间件、依赖注入容器、事件、模板引擎。不要把它们加回来。
@@ -163,20 +163,25 @@ allow('GET', 'POST');         // 只接受这些方法；GET 自动包含 HEAD�
 ```
 
 - 参数个数不在 `[min, max]` 内 → 404。`'0'` 是合法参数。参数永远是字符串（或补齐的 `null`），**内容任意，必须自己校验**。
-  数据库 id 用同一种写法（只接受规范形式，`/x/01`、`/x/+1` 都是 404，一条记录只有一个网址）：
+  数据库 id 一律用 `as_id()` 转换（只接受规范的正整数，`/x/01`、`/x/0`、`/x/+1`、`/x/abc` 都是 404，一条记录只有一个网址）：
   ```php
-  if (!preg_match('/^[1-9][0-9]{0,17}$/D', $id)) abort(404);   // 然后用 (int) $id
+  [$raw] = params(1);
+  $id = as_id($raw);                 // int；不合法 → 404。可选参数传 null 进去会得到 null
   ```
-  不要用 `ctype_digit($id)`（`'01'`、`'0001'` 也会通过）。
+  不要自己写 `ctype_digit($id)` 或 `(int) $id`（`'01'`、`'1abc'` 都会混过去）。
 - 必须 `0 ≤ min ≤ max ≤ 12`（网址最多 12 段），否则 `LogicException`。
 - 不调用 `params()` 的页面只接受 0 个参数（在收尾时检查）。
 - 不调用 `allow()` 的页面只接受 GET/HEAD（在收尾时检查）。
-- **参数范围对 `allow()` 允许的每个方法都生效。** `[$id] = params(0, 1); allow('GET', 'POST');` 意味着 `POST /x/5` 也会进到页面里。
-  只想让 POST 发到 `/x` 时，在写操作之前加一行：
+- **参数可选的页面，要分别声明两种网址接受哪些方法。** `params(0, 1)` 加上 `allow('GET', 'POST')`，意味着 `/x` 和 `/x/5` 都接受 POST，
+  原本写给 `/x` 的写操作在 `POST /x/5` 时也会执行。所以再调用一次 `allow()`，收窄带参数的网址：
   ```php
-  if (is_post() && $id !== null) abort(404);   // 只能 POST 到 /x
+  [$raw] = params(0, 1);             // /notes 或 /notes/<id>
+  allow('GET', 'POST');              // /notes：列表 + 新建
+  $id = as_id($raw);
+  if ($id !== null) allow('GET');    // /notes/<id>：只读；POST → 405（带正确的 Allow 头）
   ```
-  这里用 404 而不是 405：页面里的 `abort(405)` 带不上 `Allow:` 头（错误响应会丢弃页面设的头，§6.3），而 405 必须带它。
+  带参数的网址确实也要接受写入时，照样明确写出来：`if ($id !== null) allow('GET', 'POST');`。
+  `bin/ink check` 会报错：参数可选（min < max）、又允许了 GET 以外的方法，但整个页面只调用了一次 `allow()`。
 - `bin/ink check` 要求：`params()` 是**第一条语句**；用了 `allow()` 时它必须是**第二条语句**（紧跟 `params()`，在 `require_login()`、`csrf_check()`、`layout()` 之前）；参数用字面量（`params(1, 2)`、`allow('GET', 'POST')`），这样 `bin/ink routes` 才能读出路由表。
   顺序会影响结果：`allow()` 写在 `require_login()` 后面时，未登录的 POST 得到的是收尾时的 405，而不是跳转登录。
 
@@ -236,9 +241,18 @@ layout('site', ['title' => 'Things']);      // 6. 套布局（可选）
 
 **`allow(string ...$methods): void`**
 请求方法不在列表里 → 立即 405，并带 `Allow:` 头。`GET` 自动包含 `HEAD`；方法名不区分大小写。
+可以再调用一次来收窄某种网址（§4.3）；每次调用都单独检查。
 ```php
 allow('GET', 'POST');
 allow('POST');                       // 只处理表单提交 / API 写入的页面
+if ($id !== null) allow('GET');      // 带参数的网址只读
+```
+
+**`as_id(?string $v): ?int`**
+把路径参数转成记录 id：`null` → `null`；规范的正整数（`'42'`）→ `42`；其他（`'01'`、`'0'`、`'-1'`、`'1e3'`、`'abc'`、超过 18 位）→ 404。
+```php
+[$raw] = params(1);
+$row = one('SELECT * FROM notes WHERE id = ?', [as_id($raw)]) ?? abort(404);
 ```
 
 ### 6.2 请求
@@ -667,7 +681,7 @@ exit;
 | CSRF | 每个改数据的请求先 `csrf_check()`；每个 POST 表单放 `csrf_field()` |
 | 方法 | 处理 POST 的页面第二行写 `allow('GET', 'POST')` 或 `allow('POST')`。**GET 请求绝不改数据** |
 | 登录与权限 | `require_login()` 只证明"已登录"。数据归属和角色要在 SQL 或代码里检查（`WHERE owner_id = ?`、`abort(403)`） |
-| 输入校验 | 请求体、查询串、**路径参数**都要校验：`validate()`、id 用 `preg_match('/^[1-9][0-9]{0,17}$/D', $id)`、白名单 |
+| 输入校验 | 请求体、查询串、**路径参数**都要校验：`validate()`、路径里的 id 用 `as_id()`、其余用白名单 |
 | 限流 | 登录、注册、找回密码、公开表单、API：`rate_limit('…:' . ip_key(), …)`；登录再按账号限流 |
 | 密码 | `password_hash` / `password_verify`。不 trim，不记日志，不回显 |
 | 缓存 | `cache_public()` 只用于对所有人都一样的页面（没有用户数据，不依赖 cookie、语言、Host 头） |
@@ -809,6 +823,7 @@ exit;
 | warn / error | `allow()` 允许了 GET/HEAD/OPTIONS 以外的方法，却从没调用 `csrf_check()`。普通页面是 warn，`pages/admin.php` 和 `pages/admin/…` 是 error |
 | warn | 开头的声明里直接写了 `csrf_check()`，但页面同时允许 GET（每个 GET 都会 403） |
 | error | `pages/admin.php` 和 `pages/admin/…` 的开头声明里没有 `require_login()` |
+| error | 参数可选（`params(0, 1)` 这类 min < max）、又允许了 GET 以外的方法，但整页只调用了一次 `allow()`：要写明带参数的网址接受哪些方法，例如 `if ($id !== null) allow('GET');`（§4.3） |
 | warn | `params()` / `allow()` 的参数不是字面量 |
 | error | `layout('x')` 指向的文件不存在 |
 | error | 调用了 `partial()`，或者存在 `partials/` 目录（1.0 已移除共享片段：把 HTML 写进页面，见 §6.4） |
@@ -1003,15 +1018,16 @@ layout('site', ['title' => t(['zh' => '活动报名', 'en' => 'Sign up'])]);
 //   POST /api/signups  (JSON 请求体)      → 201 {"id": 7} | 422 {"errors": {...}} | 409
 // 不用 cookie，所以不需要 CSRF（bin/ink check 会对此给出一条 warning，属预期）。/api 下的错误都是 JSON。
 // API_TOKEN 放在 .env.php（.env.php.example 里有这个键）。
-[$id] = params(0, 1);
-allow('GET', 'POST');
+[$raw] = params(0, 1);
+allow('GET', 'POST');                                    // /api/signups：列表 + 新建
+$id = as_id($raw);                                       // 不是规范 id → 404
+if ($id !== null) allow('GET');                          // /api/signups/{id}：只读（POST → 405 + Allow 头）
 
 rate_limit('api:' . ip_key(), 120, 60);
 $token = (string) env('API_TOKEN', '');
 if ($token === '' || !hash_equals('Bearer ' . $token, (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? ''))) abort(401);
 
-if (is_post()) {
-    if ($id !== null) abort(404);                        // 只能 POST 到 /api/signups（404 而不是 405：abort(405) 带不上 Allow 头）
+if (is_post()) {                                         // 只会是 /api/signups（上面已经收窄了带 id 的网址）
     [$in, $errors] = validate(input(), [                 // input()：JSON 请求体；坏 JSON → 400
         'name'  => 'required|max:40',
         'email' => 'required|email|max:254',
@@ -1029,8 +1045,7 @@ if (is_post()) {
 }
 
 if ($id !== null) {
-    if (!preg_match('/^[1-9][0-9]{0,17}$/D', $id)) abort(404);   // 路径参数是任意字符串：只接受规范的 id
-    $row = one('SELECT id, name, email, seats, plan, newsletter, created_at FROM signups WHERE id = ?', [(int) $id]) ?? abort(404);
+    $row = one('SELECT id, name, email, seats, plan, newsletter, created_at FROM signups WHERE id = ?', [$id]) ?? abort(404);
     json(['signup' => $row]);
 }
 
@@ -1057,23 +1072,23 @@ curl -s -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json
 // pages/admin/signups.php — 后台：报名列表（分页）+ 删除。删除用表单 POST；有 htmx 时原地删掉这一行。
 //   GET  /admin/signups?page=2
 //   POST /admin/signups/{id}    删除一条
-[$id] = params(0, 1);
+[$raw] = params(0, 1);
 allow('GET', 'POST');
 $me = require_login();                                   // 未登录 → /login?next=%2Fadmin%2Fsignups
+$id = as_id($raw);                                       // 不是规范 id → 404
+if ($id !== null) allow('POST'); else allow('GET');      // /admin/signups 只看；/admin/signups/{id} 只删
 // 本仓库只有一个管理员账号（pages/login.php）。有多种角色时，在这里检查权限，例如：
 //   if (val('SELECT role FROM users WHERE id = ?', [$me]) !== 'admin') abort(403);
 
-if ($id !== null) {                                      // /admin/signups/{id} 只用于删除
-    if (!is_post() || !preg_match('/^[1-9][0-9]{0,17}$/D', $id)) abort(404);
+if ($id !== null) {                                      // POST /admin/signups/{id}：删除
     csrf_check();
-    $row = one('SELECT id, email FROM signups WHERE id = ?', [(int) $id]) ?? abort(404);
+    $row = one('SELECT id, email FROM signups WHERE id = ?', [$id]) ?? abort(404);
     q('DELETE FROM signups WHERE id = ?', [$row['id']]);
     log_info('signup deleted', ['by' => $me, 'id' => $row['id']]);
     if (is_htmx()) exit;                                 // 空响应 + hx-swap="outerHTML" → 这一行消失
     flash('ok', t(['zh' => '已删除', 'en' => 'Deleted']));
     redirect('/admin/signups', 303);
 }
-if (is_post()) abort(404);                               // POST 必须带 id
 
 [$q] = validate($_GET, ['page' => 'int|min:1']);
 $page = is_int($q['page']) ? $q['page'] : 1;             // 不合法的页码当作第 1 页
@@ -1154,8 +1169,8 @@ layout('site', ['title' => t(['zh' => '报名管理', 'en' => 'Sign-ups'])]);
 - **用 root 跑 `bin/ink migrate`**：数据库文件归 root 所有，网站写入时报错（SQLite："attempt to write a readonly database"，500）。用 `sudo -u www-data`。
 - **`cache_public()` 和语言**：靠 cookie / `Accept-Language` / 默认值决定语言的页面会被内核自动降级为不缓存（否则 CDN 会把一种语言发给所有人）。需要缓存的多语言页面，用网址区分语言并调用 `locale('en')`。
 - **`cache_public()` 和 `url()`**：`url()` 默认用请求的 Host 头，CDN 会把别人伪造的 Host 缓存给所有人。可缓存的响应里要用 `url()`，先设 `config('base_url')`。
-- **给已有的 POST 页面加路径参数**：`params()` 改成 `params(0, 1)` 后，`POST /x/5` 也会执行原来给 `/x` 写的写操作。在写操作前加 `if (is_post() && $id !== null) abort(404);`（§4.3）。
-- **id 有多种写法**：`ctype_digit()` 和 `validate()` 的 `int` 都接受 `'01'`，同一条记录会有多个网址。id 用 `preg_match('/^[1-9][0-9]{0,17}$/D', $id)`（§4.3）。
+- **给已有的 POST 页面加路径参数**：`params()` 改成 `params(0, 1)` 后，`POST /x/5` 也会执行原来给 `/x` 写的写操作。紧接着加 `if ($id !== null) allow('GET');`（§4.3）；`bin/ink check` 会提醒。
+- **id 有多种写法**：`ctype_digit()` 和 `validate()` 的 `int` 都接受 `'01'`，同一条记录会有多个网址。路径参数里的 id 一律用 `as_id()`（§4.3）。
 - **`.env.php` 覆盖了 `bin/ink serve` 的 `APP_ENV=dev`**：见 §11。
 - **session 锁**：同一用户的请求在 session 开启期间会排队。做慢操作（调用外部 API）之前，如果不再写 session，可以先 `session_write_close()`。
 - **按 `client_ip()` 限流**：IPv6 的访客可以换无数个地址。用 `ip_key()`；登录再按账号限流。

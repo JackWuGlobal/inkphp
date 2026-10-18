@@ -51,7 +51,11 @@ GET     /api/notes               -> 200 pages/api/notes.php []
 GET     /api/notes?limit=0       -> 422                       # validate(): limit must be 1..100
 POST    /api/notes               -> 401                       # not logged in: JSON, not a redirect
 DELETE  /api/notes               -> 405
-GET     /api/notes/1             -> 404
+GET     /api/notes/999999        -> http:404                      # as_id() ok, no such note
+GET     /api/notes/01            -> http:404                      # as_id(): leading zero
+GET     /api/notes/abc           -> http:404                      # as_id(): not a number
+GET     /api/notes/1/2           -> 404                       # params(0, 1): too many
+POST    /api/notes/1             -> http:405                      # allow('GET') narrows /api/notes/<id>
 GET     /api/nope                -> 404
 
 # --- robots.txt is a page (pages/robots.txt.php) ----------------------------------------------------

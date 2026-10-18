@@ -80,12 +80,14 @@ function ink_cli_page(string $file): array
         if (!in_array($tok[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $t[] = [$tok[0], $tok[1]];
     }
     $uses = $names = $decl = [];
+    $allows = 0;
     foreach ($t as $i => [$type, $text]) {
         $prev = strtolower($t[$i - 1][1] ?? '');
         if (in_array($type, [T_STRING, T_NAME_FULLY_QUALIFIED], true) && ($t[$i + 1][1] ?? '') === '('
             && !in_array($prev, ['->', '?->', '::', 'function', 'new', 'const'], true)) {
             $fn = strtolower(ltrim($text, '\\'));
             $uses[$fn] = true;
+            if ($fn === 'allow') $allows++;
             $arg = ($t[$i + 2][0] ?? 0) === T_CONSTANT_ENCAPSED_STRING ? ink_cli_literal([$t[$i + 2]]) : null;
             if ($fn === 'layout' && is_string($arg)) $names[] = [$fn, $arg];
         } elseif ($type === T_VARIABLE && in_array($text, ['$_POST', '$_FILES', '$_REQUEST', '$_GET', '$_SERVER'], true)) {
@@ -114,7 +116,7 @@ function ink_cli_page(string $file): array
         elseif (in_array($text, [')', ']', '}'], true)) $depth--;
         $stmt[] = [$type, $text];
     }
-    return $cache[$file] = ['decl' => $decl, 'uses' => $uses, 'names' => $names];
+    return $cache[$file] = ['decl' => $decl, 'uses' => $uses, 'names' => $names, 'allows' => $allows];
 }
 
 /** One statement → ['fn', 'args', 'vars' (destructured names)] if it is a declaration call; true for declare/use. */
@@ -383,6 +385,12 @@ function ink_cli_check_page(string $file, array $p): array
         $issues[] = ['warn', $file, 'allow() arguments are not literal strings'];
     } elseif (array_diff($methods, ['GET', 'HEAD', 'OPTIONS']) && !isset($p['uses']['csrf_check'])) {
         $issues[] = [$admin ? 'error' : 'warn', $file, 'allows ' . implode('/', array_diff($methods, ['GET', 'HEAD', 'OPTIONS'])) . ' but never calls csrf_check()'];
+    }
+    $writes = array_diff($methods ?? [], ['GET', 'HEAD', 'OPTIONS']);
+    if ($writes && isset($range) && $range[0] < $range[1] && $p['allows'] < 2) {
+        // /x and /x/<id> both reach this page: a POST meant for /x would also run for /x/5 unless the page says otherwise
+        $issues[] = ['error', $file, 'accepts ' . ($range[0] ? "$range[0]..$range[1]" : "0..$range[1]") . ' path params and ' . implode('/', $writes)
+            . ': say which methods the URL with the param takes, e.g. if ($id !== null) allow(\'GET\');'];
     }
     if (isset($lead['csrf_check']) && in_array('GET', $methods ?? [], true)) {
         $issues[] = ['warn', $file, 'a leading csrf_check() answers 403 to every GET: call it inside if (is_post())'];

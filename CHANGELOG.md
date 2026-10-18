@@ -40,7 +40,7 @@
 - 输出全部缓冲：页面任何时候都能设置响应头。
 
 **内核（`ink/`，替代 `_core/`）**
-- 一个只有 43 个公开函数的内核，零依赖：`params allow` · `input json redirect abort is_post is_htmx wants_json host is_https url client_ip ip_key cache_public store_upload upload_error asset` ·
+- 一个只有 44 个公开函数的内核，零依赖：`params allow as_id` · `input json redirect abort is_post is_htmx wants_json host is_https url client_ip ip_key cache_public store_upload upload_error asset` ·
   `e layout t locale` · `db q one all val tx validate` · `session flash csrf_* login logout user require_login rate_limit` · `config env log_info log_error`。
 - **去掉 Medoo**，改为 PDO 辅助函数 `q/one/all/val/tx`。只写参数化的原生 SQL，PostgreSQL 的 `RETURNING`、`::jsonb` 等都能直接用。
 - 数据库和 session 都是惰性的：用到才连接、才开启。普通页面不发 cookie，可以被 CDN 缓存（`cache_public()`）。

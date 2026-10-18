@@ -148,6 +148,14 @@ are percent-encoded.
   code meant to handle other methods; `bin/ink check` turns it into an error if the page looks at the method or the
   body without allow(): input(), is_post(), store_upload(), $_POST, $_FILES, $_REQUEST,
   `$_SERVER['REQUEST_METHOD']` or `'php://input'`.
+- allow() may be called again later to narrow one URL shape; each call is checked on its own:
+  `[$raw] = params(0, 1); allow('GET', 'POST'); $id = as_id($raw); if ($id !== null) allow('GET');`
+  A page whose params are optional (min < max) and that allows any method besides GET/HEAD/OPTIONS must call allow()
+  at least twice, otherwise `bin/ink check` errors (POST meant for /x would also run for /x/5).
+
+### 4.5 as_id(?string $v): ?int
+- Converts a path param to a record id: null → null; a canonical positive integer (`^[1-9][0-9]{0,17}$`) → int;
+  anything else ('01', '0', '-1', '1e3', 'abc', 19+ digits) → abort(404). One record has exactly one URL.
 - abort(405) from page code cannot carry an `Allow:` header (error responses drop page headers, §9): when a method
   is valid only on some URLs of a page, answer the others with abort(404).
 
@@ -314,7 +322,8 @@ when run as root.
     files are private and skipped;
   - the first statement of every page is params() (in one of the forms above), with literal 0 ≤ min ≤ max ≤ 12;
     allow(), when called, is the second statement; pages that use input()/is_post()/store_upload()/$_POST/$_FILES/
-    $_REQUEST/`$_SERVER['REQUEST_METHOD']`/`'php://input'` call allow();
+    $_REQUEST/`$_SERVER['REQUEST_METHOD']`/`'php://input'` call allow(); a page with optional params (min < max)
+    that allows a method besides GET/HEAD/OPTIONS calls allow() at least twice (§4.4);
   - pages that allow any method other than GET/HEAD/OPTIONS call csrf_check() (warning, error in the admin area); a
     leading csrf_check() on a page that allows GET (warning: every GET gets 403);
   - pages in the admin area — `pages/admin.php` and everything under `pages/admin/` — have require_login() as a

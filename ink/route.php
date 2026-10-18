@@ -101,7 +101,21 @@ function params(int $min = 0, ?int $max = null): array
     return array_pad($s['params'], $max, null);
 }
 
-/** allow('GET', 'POST'): any other method → 405 with an Allow header. GET implies HEAD. */
+/**
+ * $id = as_id($raw): a path param that must be a record id. null → null (optional param absent); a canonical positive
+ * integer ('42') → int; anything else ('01', '0', '-1', '1e3', 'abc', 19+ digits) → 404. One record, one URL.
+ */
+function as_id(?string $v): ?int
+{
+    if ($v === null) return null;
+    if (!preg_match('/^[1-9][0-9]{0,17}$/D', $v)) abort(404);
+    return (int) $v;
+}
+
+/**
+ * allow('GET', 'POST'): any other method → 405 with an Allow header. GET implies HEAD.
+ * May be called again later to narrow one URL shape: if ($id !== null) allow('GET');
+ */
 function allow(string ...$methods): void
 {
     ink_set('allow_called', true);
