@@ -114,11 +114,16 @@ function user(): int|string|null
     return is_int($id) || is_string($id) ? $id : null;
 }
 
-/** Return the user id, or stop: 401 JSON for wants_json(), else redirect to $loginPath?next=<this path>. */
-function require_login(string $loginPath = '/login'): int|string
+/**
+ * Return the user id, or stop: 401 JSON for wants_json(), else redirect to $loginPath?next=<this path>.
+ * require_login(hidden: true): a visitor who is not logged in gets the same 404 as an unknown URL (JSON or HTML),
+ * no redirect and no next= — for a back office that must not reveal that it exists.
+ */
+function require_login(string $loginPath = '/login', bool $hidden = false): int|string
 {
     $id = user();
     if ($id !== null) return $id;
+    if ($hidden) abort(404);
     if (wants_json()) abort(401);
     $next = (string) ($_SERVER['REQUEST_URI'] ?? '/');
     redirect($loginPath . (str_contains($loginPath, '?') ? '&' : '?') . 'next=' . rawurlencode($next));

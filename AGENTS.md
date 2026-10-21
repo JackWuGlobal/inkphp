@@ -529,12 +529,29 @@ if ($u && is_string($pw) && password_verify($pw, $u['password_hash'])) { login($
 $me = user() === null ? null : one('SELECT id, name FROM users WHERE id = ?', [user()]);
 ```
 
-**`require_login(string $loginPath = '/login'): int|string`**
+**`require_login(string $loginPath = '/login', bool $hidden = false): int|string`**
 已登录 → 返回用户 id。未登录：`wants_json()`（包括 `/api/…`）→ 401 JSON；否则跳到 `$loginPath?next=<当前路径和查询串，已编码>`。
 它只管"是否登录"。**权限（角色、数据归属）要自己检查。**
 ```php
 $uid = require_login();
 $doc = one('SELECT * FROM docs WHERE id = ? AND owner_id = ?', [$id, $uid]) ?? abort(404);
+```
+
+**隐藏后台**：`require_login(hidden: true)`：未登录时返回和**不存在的网址完全一样的 404**（HTML 或 JSON），不跳转、不带 `next=`，外人无法发现后台。
+配合一个“安全入口”页面使用，入口的口令放在 `.env.php`，不进 git：
+```php
+<?php // pages/gate.php → /gate/<口令>：口令对了就发通行 cookie，再去登录页；不对就是普通 404
+[$token] = params(1);
+if (!hash_equals((string) env('ADMIN_GATE'), $token)) abort(404);
+setcookie('gate', hash_hmac('sha256', 'gate', (string) env('ADMIN_GATE')), ['path' => '/', 'httponly' => true,
+    'secure' => is_https(), 'samesite' => 'Strict', 'expires' => time() + 30 * 86400]);
+redirect('/login');
+```
+```php
+// pages/login.php、pages/logout.php 开头（params/allow 之后）：没有通行 cookie → 404
+if (!hash_equals(hash_hmac('sha256', 'gate', (string) env('ADMIN_GATE')), (string) ($_COOKIE['gate'] ?? ''))) abort(404);
+// pages/admin*.php：未登录 → 404（已登录的人一定经过了入口）
+$me = require_login(hidden: true);
 ```
 
 **`rate_limit(string $key, int $max, int $windowSeconds): void`**
