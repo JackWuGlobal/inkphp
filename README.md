@@ -76,13 +76,14 @@ deploy/      nginx / 宝塔 配置和部署指南
 
 ## 和 AI 一起用
 
-让你的 AI 编程助手先读 **[AGENTS.md](AGENTS.md)**。那是完整的开发契约：每个函数的签名、行为和例子，路由规则，安全规则，`bin/ink check` 检查什么，以及三个完整的单文件示例。
+让你的 AI 编程助手先读 **[AGENTS-QUICK.md](AGENTS-QUICK.md)**（速查，约 190 行，日常写页面够用），需要细节时再读 **[AGENTS.md](AGENTS.md)**。那是完整的开发契约：每个函数的签名、行为和例子，路由规则，安全规则，`bin/ink check` 检查什么，以及三个完整的单文件示例。
 读完它，不需要读内核源码就能正确地写功能。
 
 ## 文档
 
 | 文档 | 内容 |
 |---|---|
+| [AGENTS-QUICK.md](AGENTS-QUICK.md) | 速查：规则、骨架、全部函数、常见陷阱（AI 先读这份） |
 | [AGENTS.md](AGENTS.md) | 开发契约：函数参考、路由、安全、测试、示例（给 AI，也给人） |
 | [deploy/README.md](deploy/README.md) | 部署：nginx、宝塔、Apache、Cloudflare、PHP-FPM 池、目录权限 |
 | [docs/SPEC.md](docs/SPEC.md) | 设计规格（英文），代码和文档都以它为准 |
