@@ -27,7 +27,7 @@ inkphp 1.0 是一次重写，与 0.x 不兼容。迁移方法见 [CHANGELOG.md](
 需要：PHP ≥ 8.2，带 `pdo_sqlite`（大多数发行版默认就有）。
 
 ```bash
-git clone <仓库地址> myapp && cd myapp
+git clone https://github.com/JackWuGlobal/inkphp.git myapp && cd myapp
 php bin/ink migrate        # 建示例用的数据表（SQLite：storage/db.sqlite）
 php bin/ink serve          # 开发服务器：http://127.0.0.1:8000
 ```
@@ -95,4 +95,4 @@ inkphp 适合官网、落地页、后台、中小型应用和 API，也适合"�
 
 ## 许可证
 
-MIT
+MIT，见 [LICENSE](LICENSE)。

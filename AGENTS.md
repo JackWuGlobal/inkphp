@@ -591,7 +591,7 @@ log_error('payment webhook rejected', ['reason' => $why]);
 
 | 名称 | 含义 |
 |---|---|
-| `INK_VERSION` | 内核版本，如 `'1.0.0-dev'`（发布前）、`'1.0.0'` |
+| `INK_VERSION` | 内核版本，如 `'1.0.0-beta.1'`（测试版）、`'1.0.0'` |
 | `INK_ROOT` | 项目根目录的绝对路径（`ink/` 的上一级） |
 | `INK_START` | 请求开始的 `hrtime(true)`（纳秒） |
 | `APP_ENV` | `'dev'` / `'prod'` / `'test'` |

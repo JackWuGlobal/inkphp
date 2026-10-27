@@ -3,7 +3,7 @@
 // See docs/SPEC.md §3, §9, §10. Loaded last by ink.php, so every helper already exists.
 declare(strict_types=1);
 
-define('INK_VERSION', '1.0.0-dev');
+define('INK_VERSION', '1.0.0-beta.1');
 define('INK_ROOT', realpath(__DIR__ . '/..') ?: dirname(__DIR__));
 define('INK_START', hrtime(true));
 const INK_JSON = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE;
